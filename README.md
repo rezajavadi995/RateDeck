@@ -90,11 +90,14 @@ Read these before implementation:
 
 - `AGENTS.md` — non-negotiable repository/Codex rules.
 - `CODEX_PROMPT.md` — execution prompt for Phase 1 and Phase 2.
+- `docs/DECISIONS.md` — settled owner decisions vs open implementation choices.
 - `docs/PRODUCT_SCOPE.md` — product behavior and command/admin scope.
 - `docs/ARCHITECTURE.md` — module boundaries, dependency rules, router ordering.
+- `docs/DATA_MODEL.md` — initial storage entities and invariants.
 - `docs/REFERENCE_AUDIT.md` — what to reuse conceptually from Business Bot and StarzYFire, and what to avoid.
 - `docs/MARKET_ENGINE.md` — asset registry, cache, rate budget, provenance, history.
 - `docs/PROVIDERS.md` — provider contracts and routing policy.
+- `docs/EXTERNAL_CONTRACTS_2026-08-13.md` — dated external API/Telegram contract snapshot.
 - `docs/PARSER_AND_CONVERSION.md` — normalization, strict parser, conversion graph.
 - `docs/CARD_ENGINE.md` — card design/rendering system.
 - `docs/CONTENT_RICH_TEXT_AND_UI.md` — templates, placeholders, custom emoji, buttons.
