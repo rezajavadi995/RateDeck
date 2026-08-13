@@ -117,6 +117,8 @@ A phase/release is done only when applicable gates below are evidenced on the ex
 - [ ] Asset override/reset inheritance works.
 - [ ] Uploaded logo validation/path safety tested.
 - [ ] Card implementation does not use a deep unnecessary inheritance hierarchy.
+- [ ] Render concurrency is bounded; default shared-host concurrency is 1 unless measurements justify more.
+- [ ] Render cache/temp files/history have tested retention/size bounds.
 - [ ] Representative visual/golden changes reviewed intentionally.
 
 ## Security/observability gates
@@ -131,20 +133,38 @@ A phase/release is done only when applicable gates below are evidenced on the ex
 - [ ] Arbitrary user messages are not logged in full by default.
 - [ ] Phase 2 file upload/path operations are bounded and traversal-safe.
 
+## Resource / StarzYFire coexistence gates — Phase 2
+
+- [ ] RateDeck uses one bot process by default and does not require Redis/PostgreSQL/NATS/web/API listener.
+- [ ] Default Telegram deployment uses long polling and opens no unexpected inbound application port.
+- [ ] Dedicated RateDeck paths/service account/systemd unit are used.
+- [ ] Installer/update/repair/uninstall do not touch `/opt/star`, `starzyfire-*`, StarzYFire DB/Redis/NATS/config/secrets/backups/users/groups/ports.
+- [ ] RateDeck persistent data is isolated from the source worktree where practical.
+- [ ] Opening the `ratedeck` terminal does not start a second bot/refresher/provider scheduler.
+- [ ] HTTP concurrency/background refresh/history/cache/log/backups/uploads are bounded.
+- [ ] Actual warmed steady-state RSS and representative render peak are measured and reported on representative hardware.
+- [ ] Repeated refresh/render cycles show no unexplained sustained memory growth.
+- [ ] Host baseline with StarzYFire running is compared against RateDeck idle/refresh/render bursts before production-ready claim.
+- [ ] StarzYFire remains healthy during bounded coexistence testing; meaningful instability is a release blocker.
+- [ ] Disk usage/cleanup policy is verified so RateDeck does not grow unbounded toward the 40 GB host disk.
+
 ## Installer/operations gates — Phase 2
 
 - [ ] One-line README installer matches real `install.sh`.
 - [ ] Fresh supported Debian/Ubuntu install smoke passes.
-- [ ] Re-running installer preserves `.env`, DB, assets and master key.
+- [ ] Re-running installer preserves config, DB, assets and master key.
 - [ ] `ratedeck` launcher works outside project directory.
-- [ ] systemd service uses expected venv/working directory and starts cleanly.
-- [ ] Dirty tracked repo causes normal update to stop safely.
+- [ ] Terminal Quick Setup can set/validate bot token, admin IDs and log level without exposing secrets.
+- [ ] Changing one basic setting does not require rerunning the whole setup wizard.
+- [ ] systemd service uses expected dedicated user/venv/working directory and starts cleanly.
+- [ ] Dirty tracked RateDeck repo causes normal update to stop safely.
 - [ ] Normal updater does not blind `reset --hard`/`clean -fd` operator state.
 - [ ] Pre-update backup is created/verified.
 - [ ] Backup/restore has pre-restore safety backup.
-- [ ] Uninstall preserve-data vs full-purge scopes are distinct.
+- [ ] Uninstall preserve-data vs full-purge scopes are distinct and RateDeck-only.
 - [ ] Terminal does not duplicate provider/API product settings.
 - [ ] CLI/status/log output does not expose secrets.
+- [ ] Terminal App Status reports real local RateDeck RSS/CPU/DB/disk/cache/history/backup/queue/refresh-loop information where available without external provider calls.
 
 ## Test/reporting gates
 
@@ -154,6 +174,7 @@ A phase/release is done only when applicable gates below are evidenced on the ex
 - [ ] Compile/import smoke checks ran.
 - [ ] Live provider checks, if not run, are explicitly reported as not run.
 - [ ] Live Telegram validation, if not run, is explicitly reported as not run.
+- [ ] Resource/coexistence measurements, if not run, are explicitly reported as not run; shared-host safety is not claimed without them.
 - [ ] No unexecuted test is described as passed.
 - [ ] Docs match actual implementation.
 
