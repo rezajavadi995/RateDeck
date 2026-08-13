@@ -10,15 +10,17 @@ RateDeck is deliberately neither a toy script nor an enterprise platform.
 
 - one async Python bot process;
 - SQLite;
-- no Redis/PostgreSQL/message broker requirement;
+- no Redis/PostgreSQL/NATS/message broker requirement;
+- no inbound API/web listener required in the default long-polling deployment;
 - plain explicit composition instead of DI frameworks;
 - modular packages without one-class-per-file ceremony;
 - provider-specific cache/cooldown/request counters;
 - bounded local history rather than storing every market forever;
 - full dynamic Nobitex discovery, but CoinGecko enrichment only where useful/verified;
-- Pillow rendering, not browser/headless infrastructure.
+- Pillow rendering, not browser/headless infrastructure;
+- shared-host design target: 2 vCPU / 4 GB RAM / 40 GB disk while StarzYFire may also be running, with measured coexistence required before production-ready claims.
 
-See `docs/LEAN_IMPLEMENTATION.md`.
+See `docs/LEAN_IMPLEMENTATION.md` and `docs/RESOURCE_AND_ISOLATION.md`.
 
 ## Core product principles
 
@@ -38,6 +40,7 @@ See `docs/LEAN_IMPLEMENTATION.md`.
 - Complete scoped `{placeholder}` registry with descriptions, samples, field fragments and diagnostics.
 - Design System + Asset Family + Layout + Chart Style + sparse asset override; no per-asset manual design burden.
 - API request volume is budgeted before implementation, not patched after quota failures.
+- RateDeck paths/service/database/cache/backups are isolated from StarzYFire and must never operate on `/opt/star`, `starzyfire-*` or StarzYFire-owned DB/Redis/NATS/config/secrets.
 - No fake tests or claims of readiness without exact evidence.
 
 ## Initial data sources
@@ -132,7 +135,8 @@ Phase 2 provides:
 - truthful bounded local-history charts;
 - editable elements/positions/fonts/opacity/layers;
 - logos and custom text layers;
-- preview-first Persian card designer.
+- preview-first Persian card designer;
+- bounded render queue/concurrency and cache so image work cannot grow without limit on the shared VPS.
 
 ## Terminal control center
 
@@ -142,11 +146,15 @@ Phase 2 terminal UI is English-only and launched globally with:
 ratedeck
 ```
 
-It handles service lifecycle, status, logs, database/backup, Telegram/render tests, update/repair and uninstall. Provider/API product management remains inside Telegram.
+It includes a simple **Setup / Config** flow for bot token, admin IDs and log level, plus service lifecycle, local App Status, logs, database/backup, Telegram/render tests, update/repair and uninstall.
+
+App Status is local-only and is intended to show RateDeck service state, RSS/CPU snapshot, DB size/schema, disk free space, history/cache/backups, render queue and refresh-loop health without consuming provider API quota.
+
+Provider/API product management remains inside Telegram.
 
 ## Installation target
 
-Phase 2 must provide a safe idempotent `install.sh`, systemd unit and one-line installer.
+Phase 2 must provide a safe idempotent `install.sh`, dedicated `ratedeck` service account, isolated RateDeck paths, systemd unit and one-line installer.
 
 Final command shape:
 
@@ -154,12 +162,12 @@ Final command shape:
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/rezajavadi995/RateDeck/main/install.sh)"
 ```
 
-Do not present the project as ready to install until installer acceptance tests pass.
+Do not present the project as ready to install until installer, isolation, resource/coexistence and data-preservation acceptance tests pass.
 
 ## Exactly two major implementation phases
 
 1. **Phase 1 — Core Market, Conversion, Content and Admin**: providers, parser/conversion, complete template/button/placeholder/custom-emoji customization, diagnostics, Stars and Persian admin.
-2. **Phase 2 — Exceptional Cards + Operations/Installer**: finished visual product, card designer, terminal, backups, systemd and one-installer.
+2. **Phase 2 — Exceptional Cards + Operations/Installer**: finished visual product, card designer, shared-host resource hardening, terminal, backups, systemd and one-installer.
 
 Each phase has internal checkpoints for reviewability; those checkpoints are not extra phases. After Phase 2 the currently defined product scope is complete.
 
@@ -171,6 +179,7 @@ Read these before implementation:
 - `CODEX_PROMPT.md` — execution prompt.
 - `docs/DECISIONS.md` — settled owner decisions.
 - `docs/LEAN_IMPLEMENTATION.md` — anti-overengineering guardrails.
+- `docs/RESOURCE_AND_ISOLATION.md` — 4 GB / 2 vCPU resource budget and StarzYFire coexistence contract.
 - `docs/PRODUCT_SCOPE.md` — product behavior/scope.
 - `docs/ARCHITECTURE.md` — practical module/dependency boundaries.
 - `docs/DATA_MODEL.md` — compact Phase 1 schema + deferred Phase 2 persistence.
