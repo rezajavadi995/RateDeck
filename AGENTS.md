@@ -172,8 +172,31 @@ Diagnostics reuse existing validators/services; do not build a second implementa
 - Do not invent historical chart points.
 - Prefer lightweight local Pillow rendering; no browser/headless-Chrome renderer unless scope changes.
 - Avoid deep inheritance hierarchies for themes/elements; prefer data + reusable drawing primitives.
+- On the 4 GB shared-host target, default card-render concurrency is 1 unless measurement proves a higher value safe.
+- Rendering/cache/history are bounded; never create unlimited render tasks or persistent artifacts.
 
-## 10. Storage and secrets
+## 10. Shared-host resource and StarzYFire isolation
+
+Follow `docs/RESOURCE_AND_ISOLATION.md`.
+
+RateDeck is expected to coexist with StarzYFire on a 2 vCPU / 4 GB RAM / 40 GB host.
+
+Non-negotiable:
+
+- one RateDeck bot process by default;
+- no Redis/PostgreSQL/NATS/web/API server requirement;
+- Telegram long polling by default with no inbound application port;
+- dedicated RateDeck filesystem paths/service account/systemd unit;
+- never touch `/opt/star`, `starzyfire-*`, StarzYFire DB/Redis/NATS/config/secrets/backups/ports/users/groups;
+- no broad wildcard uninstall/update/repair operations;
+- no distro-wide Python dependency mutation outside the RateDeck venv;
+- bounded HTTP concurrency, history, rendered cache, logs, backups and uploads;
+- terminal status is local-only and must not launch another bot/refresher;
+- resource targets are measured before release; do not claim shared-host safety from architecture alone.
+
+Engineering measurement targets are documented in `docs/RESOURCE_AND_ISOLATION.md`; actual measurements on representative hardware are required in Phase 2 acceptance.
+
+## 11. Storage and secrets
 
 - Phase 1 uses SQLite.
 - Keep the schema compact; create tables only for Phase 1 runtime needs.
@@ -185,17 +208,19 @@ Diagnostics reuse existing validators/services; do not build a second implementa
 - Provider keys stored through Telegram admin are encrypted at rest using a maintained library/local master key with restrictive permissions.
 - `.env` and local secret keys are never committed.
 
-## 11. Installer/update rules
+## 12. Installer/update rules
 
 - Installer/terminal product work belongs to Phase 2 except minimal development bootstrap.
 - Installer is idempotent and targets supported Debian/Ubuntu systems.
 - Global command is `ratedeck`.
 - Terminal control center does not duplicate provider/API administration.
+- Terminal includes a simple Quick Setup/per-setting Config flow for bot token, admin IDs and log level.
 - Update refuses unsafe dirty-tree replacement; never use blind `git reset --hard` + `git clean -fd` as normal update.
-- Preserve `.env`, DB, uploaded assets, master secret key, backups and operator data.
+- Preserve RateDeck config/DB/assets/keys/backups and operator data.
+- Installer/update/repair/uninstall operate only on exact RateDeck-owned resources.
 - Destructive actions require explicit confirmation.
 
-## 12. Logging/observability rules
+## 13. Logging/observability rules
 
 - Structured application logs + provider logs/events + durable admin audit trail.
 - Redact secrets by construction.
@@ -203,7 +228,7 @@ Diagnostics reuse existing validators/services; do not build a second implementa
 - Provider diagnostics expose source, latency, last success/failure, cache age, cooldown and request counters without exposing credentials.
 - Avoid noisy per-update success logs that add no operational value.
 
-## 13. Testing gates
+## 14. Testing gates
 
 At minimum, relevant work covers:
 
@@ -221,11 +246,13 @@ At minimum, relevant work covers:
 - diagnostics local-no-network/live-cooldown behavior;
 - admin authorization;
 - Phase 2 card structural/golden invariants;
-- Phase 2 installer safety/smoke behavior.
+- Phase 2 installer/isolation/safety/smoke behavior;
+- Phase 2 bounded render concurrency/cache/history/disk behavior;
+- Phase 2 measured shared-host resource/coexistence validation.
 
 Run focused tests while working. Full suite is required at phase completion unless a real environment blocker is documented.
 
-## 14. Phase execution
+## 15. Phase execution
 
 There are exactly **two major implementation phases**.
 
@@ -233,13 +260,14 @@ Each phase may and should be executed through ordered internal checkpoints with 
 
 Do not start Phase 2 until Phase 1 acceptance is reviewed.
 
-## 15. Source-of-truth docs
+## 16. Source-of-truth docs
 
 Before implementation, read:
 
 - `README.md`
 - `docs/DECISIONS.md`
 - `docs/LEAN_IMPLEMENTATION.md`
+- `docs/RESOURCE_AND_ISOLATION.md`
 - `docs/PRODUCT_SCOPE.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DATA_MODEL.md`
@@ -258,4 +286,4 @@ Before implementation, read:
 - `docs/PHASES.md`
 - `docs/DEFINITION_OF_DONE.md`
 
-If docs conflict, `AGENTS.md` safety/architecture constraints take precedence, then `docs/DECISIONS.md`, then `docs/LEAN_IMPLEMENTATION.md`, then the more specific domain document, then README.
+If docs conflict, `AGENTS.md` safety/architecture constraints take precedence, then `docs/DECISIONS.md`, then `docs/LEAN_IMPLEMENTATION.md`, then `docs/RESOURCE_AND_ISOLATION.md` for deployment/resource/isolation questions, then the more specific domain document, then README.
