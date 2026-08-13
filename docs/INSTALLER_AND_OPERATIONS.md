@@ -24,9 +24,17 @@ Preferred installation layout separates source, configuration and mutable data:
 └── history/
 /var/log/ratedeck/             # only if file logging is enabled
 /var/backups/ratedeck/
-/usr/local/bin/ratedeck
+/usr/local/bin/price           # symlink to RateDeck venv console script
 /etc/systemd/system/ratedeck.service
 ```
+
+This follows normal Linux separation:
+
+- `/opt/ratedeck` = application source/venv;
+- `/etc/ratedeck` = protected configuration/secrets;
+- `/var/lib/ratedeck` = mutable application data;
+- `/var/backups/ratedeck` = application backups;
+- `/usr/local/bin/price` = global operator command.
 
 Exact placement may be adjusted during Phase 2 only if the same isolation/data-preservation properties remain true.
 
@@ -101,30 +109,73 @@ Conceptual sequence:
 9. create/preserve protected `/etc/ratedeck/ratedeck.env`;
 10. generate/preserve encryption master key;
 11. initialize/upgrade RateDeck SQLite schema with pre-migration backup when appropriate;
-12. install `ratedeck` launcher;
-13. write `ratedeck.service` only;
-14. run configuration/import/database smoke checks;
-15. offer/run Quick Setup when required;
-16. optionally enable/start RateDeck service according to installer contract;
-17. print clear summary/next steps.
+12. install the Python console entry point `price` in the RateDeck venv;
+13. create/verify `/usr/local/bin/price -> /opt/ratedeck/.venv/bin/price`;
+14. write `ratedeck.service` only;
+15. run configuration/import/database smoke checks;
+16. offer/run Quick Setup when required;
+17. optionally enable/start RateDeck service according to installer contract;
+18. print clear summary/next steps.
+
+## Global `price` launcher
+
+The operator-facing command is:
+
+```text
+price
+```
+
+The Python package exposes a console script named `price`, conceptually from project metadata such as:
+
+```text
+price = ratedeck.cli.main:main
+```
+
+Installer then creates the stable global symlink:
+
+```text
+/usr/local/bin/price -> /opt/ratedeck/.venv/bin/price
+```
+
+Therefore `price` works from `/root`, `/tmp`, `/opt/star`, the home directory, or any other current working directory without changing directory first.
+
+Rules:
+
+- bare `price` opens the interactive terminal menu;
+- the CLI resolves all RateDeck paths explicitly and never assumes current working directory equals the repo;
+- installer/repair verifies the symlink target exists and is RateDeck-owned;
+- if `/usr/local/bin/price` already exists and is not the expected RateDeck-owned symlink, installer **must not overwrite it silently**;
+- venv repair recreates the console entry point and then repairs the symlink if safe;
+- uninstall removes the global link only after ownership/target verification.
+
+Small non-interactive convenience commands are allowed and expected:
+
+```text
+price status
+price start
+price stop
+price restart
+```
+
+They invoke the same Python service-control functions used by the menu.
 
 ## Quick Setup / configuration
 
 Initial configuration must be as easy as the useful parts of the StarzYFire terminal flow, without copying its infrastructure complexity.
 
-After installation the operator can run:
+After installation the operator runs:
 
 ```text
-ratedeck
+price
 ```
 
-and choose `Setup / Config`, or use an explicit setup subcommand if implemented.
+and chooses `Setup / Config`.
 
 Quick Setup should guide through only operational bootstrap values:
 
 1. Telegram bot token — masked in status/output;
 2. admin Telegram ID(s);
-3. log level from a bounded inline/terminal choice;
+3. log level from a bounded terminal choice;
 4. validate config syntax;
 5. test Telegram `getMe` on explicit request;
 6. show a final summary with secrets redacted;
@@ -136,28 +187,75 @@ Provider API keys/routing are intentionally **not** part of terminal Quick Setup
 
 Changing one config value must not force the operator through the entire wizard again. Provide both Quick Setup and per-setting edit actions.
 
-## Update safety
+## Running the bot
 
-Normal update flow must **not** blindly run:
+The normal long-running bot is managed only by `ratedeck.service`.
+
+From the terminal menu:
 
 ```text
+Service -> Start
+```
+
+starts the bot.
+
+For first setup, `Setup / Config -> Start RateDeck` may call the exact same service-start operation after configuration validates.
+
+From shell, the convenience command is:
+
+```text
+price start
+```
+
+No command should launch a second long-running bot if `ratedeck.service` is already active. Bare `price` opens the menu; it does **not** start another bot process.
+
+## Smart Update safety
+
+The terminal update is state-aware. Normal update must **not** blindly run:
+
+```text
+git pull
 git reset --hard origin/main
 git clean -fd
 ```
 
-Instead:
+### Update preflight
 
-1. inspect RateDeck repository state;
-2. if tracked local modifications exist, stop and report them unless an explicit recovery mode is chosen;
-3. create RateDeck DB/config/assets/key backup;
-4. `git fetch`;
-5. verify expected RateDeck remote/branch;
-6. perform fast-forward-only update where possible;
-7. update RateDeck venv dependencies;
-8. run RateDeck-owned schema migration;
-9. run smoke checks;
-10. restart `ratedeck.service` only in the explicit update workflow;
-11. verify RateDeck health.
+Before mutation, collect and display:
+
+- current local commit;
+- fetched remote `main` commit;
+- up-to-date / update-available / diverged status;
+- expected remote URL/branch validity;
+- tracked/untracked working-tree state relevant to safe update;
+- current and target app/schema version where available;
+- whether dependency manifests changed;
+- whether migrations are pending;
+- whether launcher/systemd templates changed;
+- free disk/backup-space check;
+- current `ratedeck.service` state.
+
+If already current, return **UP TO DATE** with no update mutation.
+
+### Update algorithm
+
+1. verify expected RateDeck repository/remote/branch/path;
+2. refuse normal update if unsafe tracked local changes or divergence exist;
+3. fetch remote and calculate exact commit delta;
+4. optionally show changed commits/files before confirmation;
+5. validate enough disk/backup space;
+6. create and verify pre-update backup for RateDeck persistent data/config/key metadata under policy;
+7. perform fast-forward-only code update;
+8. reinstall dependencies only if dependency files changed or repair explicitly requests it;
+9. run only pending RateDeck migrations, with pre-migration safety checks;
+10. recreate/verify `price` venv entry point and `/usr/local/bin/price` only if necessary;
+11. update/verify `ratedeck.service` only if its template changed;
+12. run compile/import/config/database smoke checks;
+13. if RateDeck was running, use the explicit update restart policy for `ratedeck.service` only;
+14. verify post-update RateDeck health;
+15. report old/new commit plus steps executed/skipped.
+
+A failed preflight stops before mutation. A post-update validation failure preserves backup/recovery information and never broadens repair scope to StarzYFire or unrelated host services.
 
 Do not delete untracked files in persistent RateDeck data directories and do not inspect/reset unrelated repositories.
 
@@ -194,18 +292,6 @@ Requirements:
 - no unexpected inbound port/listener in default long-polling deployment.
 
 Optional systemd memory/CPU limits are added only after measured coexistence tests. Do not guess aggressive hard limits that create restart loops.
-
-## `ratedeck` launcher
-
-`/usr/local/bin/ratedeck` is a tiny stable launcher into the Python CLI package, not a second implementation of operational logic.
-
-It resolves the install directory and executes conceptually:
-
-```text
-/opt/ratedeck/.venv/bin/python -m ratedeck.cli
-```
-
-The Python CLI provides the polished English menu with graceful non-TTY behavior.
 
 ## Backups
 
@@ -289,6 +375,7 @@ Repair may:
 - recreate RateDeck venv;
 - reinstall RateDeck dependencies;
 - validate RateDeck permissions;
+- recreate/verify the `price` console entry point and `/usr/local/bin/price` symlink;
 - rewrite only known RateDeck systemd unit/launcher from repository templates;
 - run RateDeck DB integrity/schema checks;
 - validate RateDeck font/assets directories.
@@ -301,7 +388,7 @@ Offer two scopes:
 
 ### Application uninstall, preserve data
 
-Remove/disable only RateDeck service/launcher/source/venv as appropriate while preserving RateDeck DB/backups/assets/secrets.
+Remove/disable only RateDeck service/verified `price` launcher/source/venv as appropriate while preserving RateDeck DB/backups/assets/secrets.
 
 ### Full purge
 
@@ -319,11 +406,16 @@ Phase 2 must include automated/static tests and at least a controlled disposable
 - existing DB preservation;
 - dedicated service user/path ownership;
 - symlink/path escape rejection;
+- existing unrelated `/usr/local/bin/price` collision refusal;
+- `price` opens menu from arbitrary working directories;
+- `price status/start/stop/restart` use the same service logic;
 - dirty RateDeck git tree update refusal;
+- already-up-to-date no-op;
 - fast-forward update;
-- broken venv repair;
+- dependency reinstall only when required;
+- pending migration handling;
+- broken venv/launcher repair;
 - backup creation/verification;
-- launcher works from arbitrary directory;
 - systemd unit content sanity;
 - no plaintext secret leak in normal output;
 - no operation against `/opt/star`, `starzyfire-*`, Redis, PostgreSQL or NATS;
