@@ -212,10 +212,15 @@ Engineering measurement targets are documented in `docs/RESOURCE_AND_ISOLATION.m
 
 - Installer/terminal product work belongs to Phase 2 except minimal development bootstrap.
 - Installer is idempotent and targets supported Debian/Ubuntu systems.
-- Global command is `ratedeck`.
+- Global terminal command is **`price`**.
+- Installer creates `/usr/local/bin/price` as a verified symlink to the RateDeck venv console script `/opt/ratedeck/.venv/bin/price`.
+- Bare `price` opens the control center from any working directory and must not launch a second bot process.
+- `price status|start|stop|restart` are thin convenience commands over the same service-control logic.
+- The normal menu action that runs the bot is `Service -> Start`.
 - Terminal control center does not duplicate provider/API administration.
 - Terminal includes a simple Quick Setup/per-setting Config flow for bot token, admin IDs and log level.
-- Update refuses unsafe dirty-tree replacement; never use blind `git reset --hard` + `git clean -fd` as normal update.
+- Update is state-aware: verify repo/remote/branch; fetch/compare commits; detect dirty/diverged state; no-op if current; back up; fast-forward only; install dependencies only when needed; run only pending migrations; smoke-check; restart/verify RateDeck only.
+- Never use blind `git pull`, `git reset --hard` + `git clean -fd` as normal update behavior.
 - Preserve RateDeck config/DB/assets/keys/backups and operator data.
 - Installer/update/repair/uninstall operate only on exact RateDeck-owned resources.
 - Destructive actions require explicit confirmation.
@@ -247,6 +252,8 @@ At minimum, relevant work covers:
 - admin authorization;
 - Phase 2 card structural/golden invariants;
 - Phase 2 installer/isolation/safety/smoke behavior;
+- Phase 2 `price` launcher from arbitrary working directories and command-collision safety;
+- Phase 2 smart-update no-op/dirty-tree/dependency/migration/backup/restart verification;
 - Phase 2 bounded render concurrency/cache/history/disk behavior;
 - Phase 2 measured shared-host resource/coexistence validation.
 
