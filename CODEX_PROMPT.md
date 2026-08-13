@@ -121,15 +121,21 @@ Required result:
 - preview-first Persian card designer;
 - rich customizable card captions using Phase 1 placeholder/rich-text engine;
 - complete card renderer diagnostics;
-- English `ratedeck` terminal control center with Quick Setup / per-setting Config;
+- English terminal control center whose **global command is `price`**;
+- `/usr/local/bin/price -> /opt/ratedeck/.venv/bin/price` verified symlink;
+- bare `price` opens the menu from any working directory without spawning a second bot;
+- `price status|start|stop|restart` thin convenience commands;
+- menu `Service -> Start` is the normal bot-start action;
+- Quick Setup / per-setting Config;
 - local terminal App Status showing measured RateDeck resource/data state without provider API calls;
+- smart state-aware update/repair: fetch/compare/preflight/backup/fast-forward/dependencies-if-needed/migrations-if-pending/smoke/restart-and-verify;
 - safe idempotent `install.sh` + dedicated RateDeck paths/user/systemd + README one-liner;
-- backup/restore/update/repair flows with data preservation;
+- backup/restore flows with data preservation;
 - explicit isolation from StarzYFire/shared services;
 - actual resource/coexistence measurements before production-ready claim;
 - final full regression/readiness evidence.
 
-Do not invent history, add browser/headless rendering, expand into unrelated infrastructure, or add guessed aggressive systemd CPU/memory limits before measurement.
+Do not invent history, add browser/headless rendering, expand into unrelated infrastructure, add guessed aggressive systemd CPU/memory limits before measurement, or use a blind `git pull/reset/clean` updater.
 
 ## Implementation style
 
