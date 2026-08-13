@@ -204,11 +204,14 @@ Run the most relevant tests before reporting completion. Full suite is required 
 Before implementation, read:
 
 - `README.md`
+- `docs/DECISIONS.md`
 - `docs/PRODUCT_SCOPE.md`
 - `docs/ARCHITECTURE.md`
+- `docs/DATA_MODEL.md`
 - `docs/REFERENCE_AUDIT.md`
 - `docs/MARKET_ENGINE.md`
 - `docs/PROVIDERS.md`
+- `docs/EXTERNAL_CONTRACTS_2026-08-13.md`
 - `docs/PARSER_AND_CONVERSION.md`
 - `docs/CARD_ENGINE.md`
 - `docs/CONTENT_RICH_TEXT_AND_UI.md`
@@ -219,4 +222,4 @@ Before implementation, read:
 - `docs/PHASES.md`
 - `docs/DEFINITION_OF_DONE.md`
 
-If docs conflict, `AGENTS.md` safety/architecture constraints take precedence, then the more specific domain document, then README.
+If docs conflict, `AGENTS.md` safety/architecture constraints take precedence, then `docs/DECISIONS.md`, then the more specific domain document, then README.
