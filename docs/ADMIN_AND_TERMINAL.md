@@ -236,15 +236,41 @@ The terminal should feel as convenient as the useful operational parts of StarzY
 
 It is a polished operations console, not a second product admin panel.
 
-## Global launcher
+## Global launcher: `price`
 
-Installer creates:
+The public shell command is **`price`**.
+
+Installer creates a Python console-script entry point inside the RateDeck virtual environment and then creates a real global symlink:
 
 ```text
-/usr/local/bin/ratedeck
+/usr/local/bin/price -> /opt/ratedeck/.venv/bin/price
 ```
 
-Running `ratedeck` from any directory opens the control center.
+The package console entry point maps `price` to the RateDeck CLI main function.
+
+Requirements:
+
+- running `price` from **any current working directory** opens the interactive RateDeck Control Center;
+- the CLI must not depend on the caller being inside `/opt/ratedeck`;
+- the symlink target is validated during install/repair;
+- rebuilding the RateDeck venv must recreate/verify the target console script and symlink;
+- no unrelated system command/file named `price` may be overwritten silently: installer must detect an existing non-RateDeck path and ask/refuse safely rather than replacing it blindly.
+
+The old `ratedeck` command is not the primary product launcher. Do not create two competing primary command names unless the owner explicitly requests an alias later.
+
+### Non-interactive convenience commands
+
+The same CLI should support a small useful command surface:
+
+```text
+price                 # open interactive menu
+price status          # local RateDeck status
+price start           # start ratedeck.service
+price stop            # stop ratedeck.service
+price restart         # restart ratedeck.service
+```
+
+These subcommands are thin adapters over the same service-control logic used by the menu; they do not duplicate implementation.
 
 ## Language/style
 
@@ -313,14 +339,26 @@ This provides the configuration convenience wanted from StarzYFire without impor
 
 ## Service
 
-- status;
-- start;
-- stop;
-- restart;
-- enable/disable systemd autostart;
-- optional foreground debug run.
+Exact submenu:
 
-Every action targets exactly `ratedeck.service` and reports the actual systemd outcome.
+```text
+Service
+
+ [1] Status
+ [2] Start
+ [3] Stop
+ [4] Restart
+ [5] Enable at boot
+ [6] Disable at boot
+ [7] Foreground debug run   # optional, clearly marked
+ [0] Back
+```
+
+**The normal menu action that runs the bot is `Service -> Start`.**
+
+Quick Setup also exposes `Start RateDeck` after valid configuration for first-run convenience.
+
+Every action targets exactly `ratedeck.service` and reports the real systemd outcome. Starting the service must not spawn a second instance if systemd already reports it active.
 
 ## App Status
 
@@ -383,19 +421,52 @@ Use local sample data or current cache without uncontrolled provider refresh.
 
 This action must use the same render concurrency/resource gate as normal card rendering so terminal tests cannot overload the shared server.
 
-## Update / repair
+## Smart Update / Repair
 
-- inspect RateDeck repo state;
-- refuse unsafe overwrite of tracked modifications;
-- back up RateDeck DB/config/assets/key first;
-- fetch and fast-forward-only normal update;
-- install changed dependencies only inside RateDeck venv;
-- controlled RateDeck migrations;
-- smoke tests;
-- restart RateDeck only according to explicit update/operator action;
-- preserve recoverable old RateDeck data on failure.
+`Update / Repair` is deliberately **state-aware**, not a blind `git pull` button.
 
-Never use blind normal-path `git reset --hard` + `git clean -fd` and never operate on `/opt/star` or `starzyfire-*` units.
+### Update screen
+
+Before changing anything, show a compact preflight such as:
+
+```text
+Current commit     abc1234
+Remote main        def5678
+Status             UPDATE AVAILABLE
+Working tree       CLEAN
+DB schema          7 -> 8 pending
+Dependencies       changed / unchanged
+Backup space       OK
+Service            RUNNING
+
+ [1] View changed files/commits
+ [2] Run preflight again
+ [3] Update RateDeck
+ [4] Repair installation
+ [0] Back
+```
+
+### Update algorithm
+
+1. verify this is the expected RateDeck repository/remote/branch;
+2. inspect tracked/untracked state and refuse unsafe overwrite;
+3. `git fetch` and compare exact local/remote commits;
+4. if already current, report **UP TO DATE** and make no mutation;
+5. check disk space and writable RateDeck paths;
+6. determine whether dependency manifests, schema migrations, service/unit/launcher files changed;
+7. create and verify a pre-update backup of RateDeck DB/config/assets/master-key metadata according to backup policy;
+8. perform fast-forward-only code update;
+9. reinstall dependencies **only when required** or when repair policy explicitly requests it;
+10. run only pending RateDeck migrations, with migration backup/safety rules;
+11. verify `/usr/local/bin/price` symlink/CLI entry point if launcher-related files changed;
+12. run compile/import/config/DB smoke checks;
+13. if the service was running, present/perform the explicit update restart policy for **ratedeck.service only**;
+14. verify service health after restart;
+15. report old/new commit and every performed/skipped step.
+
+If any preflight fails, normal update stops before destructive mutation. If a post-update validation fails, preserve backups and present bounded recovery/repair options; never start touching StarzYFire or another repository.
+
+Never use blind normal-path `git reset --hard` + `git clean -fd`, never operate on `/opt/star`, and never restart `starzyfire-*` units.
 
 ## Uninstall
 
@@ -406,13 +477,15 @@ Separate:
 
 Do not remove unrelated system services/packages or StarzYFire resources.
 
+Uninstall removes `/usr/local/bin/price` only after verifying that it is the RateDeck-owned symlink/launcher.
+
 ## Shared logic
 
 CLI calls the same app services for DB/backup/health/render/config where applicable. It does not reimplement product logic in shell.
 
 ## Resource behavior
 
-Terminal itself should be lightweight and short-lived. Opening `ratedeck` must not launch a second long-running bot, background scheduler or provider refresher.
+Terminal itself should be lightweight and short-lived. Opening `price` must not launch a second long-running bot, background scheduler or provider refresher.
 
 Status/config/database views use local state. Live external API diagnostics stay in Telegram Admin and remain quota-aware.
 
