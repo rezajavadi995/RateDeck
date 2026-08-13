@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+/data/
+/logs/
+/backups/
+/runtime/
+
+# Generated/rendered media
+/rendered/
+/assets/uploads/
+/tmp/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local test artifacts
+.pytest_tmp/
+artifacts/
