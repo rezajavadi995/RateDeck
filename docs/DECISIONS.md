@@ -94,7 +94,7 @@ Not separate:
 - `/crypto`
 - `/rate`
 
-`/price` and `/convert` may be hidden compatibility aliases, but the normal UX is parser-driven.
+`/price` and `/convert` may be hidden Telegram compatibility aliases, but the normal UX is parser-driven. This Telegram `/price` alias is unrelated to the server-side shell command `price`.
 
 ### Telegram Admin UX
 
@@ -168,10 +168,15 @@ A “Run all diagnostics” action may aggregate local checks, but it must not b
 ### Terminal
 
 - English-only.
-- Global command: `ratedeck`.
+- Global shell command: **`price`**.
+- Installer creates `/usr/local/bin/price` as a verified symlink to `/opt/ratedeck/.venv/bin/price`.
+- Bare `price` opens the terminal menu from any working directory and must not start a second bot process.
+- Convenience subcommands: `price status`, `price start`, `price stop`, `price restart`.
+- The normal menu action that runs the bot is `Service -> Start`; first-run Quick Setup may expose the same Start action after validation.
 - Colored/polished operational menu.
 - No API/provider administration.
 - Service/log/database/backup/config/test-card/update/repair/uninstall functions.
+- Update is state-aware: fetch/compare/preflight/backup/fast-forward/dependencies-if-needed/migrations-if-pending/smoke/restart-and-verify. It is not a blind `git pull` operation.
 
 ### Installer
 
@@ -180,6 +185,7 @@ A “Run all diagnostics” action may aggregate local checks, but it must not b
 - Do not use blind hard reset + clean as normal update.
 - Preserve config/DB/assets/keys/backups.
 - Installer/terminal operational work belongs to Phase 2, not Phase 1 except minimal development/bootstrap needs.
+- Installation layout follows separated Linux paths: source/venv in `/opt/ratedeck`, config in `/etc/ratedeck`, mutable data in `/var/lib/ratedeck`, backups in `/var/backups/ratedeck`, and the global `price` symlink in `/usr/local/bin`.
 
 ### Storage scope
 
