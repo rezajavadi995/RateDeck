@@ -1,53 +1,57 @@
 # Content, Rich Text, Buttons and Telegram UI Safety
 
-## Goals
+## Goal
 
-RateDeck lets the admin customize user-facing content deeply without scattering strings, placeholder rules, custom emoji IDs or callback behavior across handlers.
+RateDeck must let the admin deeply customize user-facing text, captions and designated buttons without scattering strings, placeholder rules, custom emoji IDs or Telegram-limit handling across routers.
 
-The core requirement is **central representation + central validation + central rendering**.
+The core design is:
 
-## Template system
+**one Placeholder Registry + one template system + one rich-text compiler + one button/callback layer + one diagnostics layer.**
 
-Every editable text has a stable key, for example:
+## Customizable content surface
 
-- `user.start`
-- `user.help`
-- `user.market`
-- `user.support`
-- `user.about`
-- `market.price.text`
-- `market.conversion.text`
-- `card.caption.master`
-- `card.field.asset_header`
-- `card.field.local_price`
-- `card.field.usd_price`
-- `card.field.change`
-- `card.field.high_low`
-- `card.field.source`
-- `card.field.updated_at`
-- `admin.provider.health`
-- `admin.error.generic`
+At minimum the admin can edit/reset/preview:
 
-Handlers reference keys; they do not contain the customizable prose.
+- `/start` content;
+- `/help` content;
+- `/market` content;
+- `/support` content;
+- `/about` content and visibility where configured;
+- price response text;
+- conversion response text;
+- market empty/stale/unavailable messages;
+- card master caption (foundation Phase 1, fully used Phase 2);
+- card field fragments;
+- designated admin-facing helper/instruction texts where product-safe.
+
+Handlers reference stable template keys; customizable prose is not embedded inside handler code.
 
 ## Template definition
 
-Conceptual fields:
+Each editable template has:
 
-- key;
-- title shown to admin;
+- stable key;
+- Persian admin title/description;
 - scope/context;
+- target surface (`message`, `caption`, etc.);
 - default rich document;
 - allowed placeholders;
-- required placeholders;
-- enabled state if applicable;
-- revision;
-- updated_at/admin ID;
-- sample preview context.
+- required placeholders where needed;
+- enabled/visibility policy if applicable;
+- revision/update/admin metadata;
+- realistic sample preview context.
 
-## Placeholder contracts
+## Central Placeholder Registry
 
-Placeholders are explicit per scope.
+Every supported `{placeholder}` is registered centrally with metadata:
+
+- stable key;
+- valid scope(s);
+- value type;
+- Persian description;
+- sample value;
+- formatting/escape policy;
+- optional/required/availability semantics where applicable.
 
 Possible market placeholders include:
 
@@ -82,25 +86,54 @@ Generic command scopes may include:
 - `{available_categories}`
 - `{command_examples}`
 
-Do not automatically allow every placeholder everywhere.
+Do not automatically allow every placeholder in every template.
+
+## Admin placeholder browser
+
+Every template editor has an inline action such as:
+
+`🧩 آکولادهای این متن`
+
+It shows only placeholders valid for that exact scope, paged if needed, with:
+
+- literal syntax to type/copy, e.g. `{price_toman}`;
+- Persian meaning;
+- sample output;
+- optional/required status when relevant.
+
+The admin may mix placeholders with any normal text, punctuation, line breaks, ordinary emoji and captured custom emoji.
+
+## Literal braces
+
+The implementation must define and document a simple literal-brace escape rule so the admin can intentionally display `{` or `}` without invoking placeholder parsing.
+
+Malformed or accidental brace syntax must be reported before save.
 
 ## Field-fragment model
 
-Card captions use composable field fragments plus a master template.
+Card captions and reusable market blocks use composable field fragments.
 
-Example field fragment:
+Examples:
+
+```text
+{field.asset_header}
+{field.local_price}
+{field.usd_price}
+{field.change}
+{field.high_low}
+{field.source}
+{field.updated_at}
+```
+
+A field itself is an editable rich template with its own allowed placeholders.
+
+Example:
 
 ```text
 {asset_emoji} {asset_name} ({asset_symbol})
 ```
 
-Example local-price fragment:
-
-```text
-💵 قیمت ایران: {price_toman} تومان
-```
-
-Example master:
+Master caption example:
 
 ```text
 {field.asset_header}
@@ -113,208 +146,238 @@ Example master:
 {field.updated_at}
 ```
 
-Admin may add arbitrary fixed text around fields. Missing optional field data resolves through explicit field policy (usually empty fragment), not raw `{field.*}` leakage.
+Rules:
 
-## Save-time validation
+- field reference must exist;
+- direct/indirect cycles are rejected;
+- expansion depth/size is bounded;
+- optional missing data follows explicit field policy (usually empty fragment);
+- unresolved `{field.*}` never reaches users.
 
-Before save:
+## Save flow
 
-1. parse rich document;
-2. validate braces/placeholders;
-3. reject unknown placeholders;
-4. verify required placeholders;
-5. estimate/render with sample context;
-6. enforce Telegram length limits for the target surface;
-7. display preview;
-8. save only after explicit confirmation where the flow requires it.
+For arbitrary text/rich-template editing:
 
-Malformed templates never reach users as raw braces.
+1. capture input/entities;
+2. parse rich document;
+3. validate brace syntax;
+4. validate placeholder names/scopes;
+5. validate required fields;
+6. validate field graph/cycles/bounds;
+7. expand realistic sample context;
+8. compile Telegram entities;
+9. enforce target Telegram length;
+10. show preview/current-vs-new summary;
+11. save on explicit confirmation where appropriate.
+
+Invalid templates never become active just because parsing partially succeeded.
 
 ## Rich-text internal representation
 
-Do not store only raw HTML and then perform arbitrary `.format()` over it.
+Do not store only raw HTML and call `.format()` on it.
 
-Preferred internal model is a serializable rich document/AST with segments such as:
+Use one serializable rich-document representation that can contain:
 
 - plain text;
 - placeholder token;
-- custom emoji token with Telegram ID + fallback;
-- bold/italic/underline/strikethrough/spoiler/code/pre where supported;
-- link entity with validated URL;
+- field token;
+- custom emoji token (real Telegram ID + fallback);
+- ordinary formatting supported by Telegram;
+- validated links;
 - line breaks.
 
-The exact type design is implementation-specific, but placeholder expansion must occur before final Telegram entity offset compilation.
+Placeholder expansion happens before final Telegram entity offset compilation.
 
-## Custom/Premium Emoji capture
+## Premium/custom emoji
 
-There is **no separate Premium Emoji Manager**.
+There is **no standalone Premium Emoji manager**.
 
-When an admin sends/edit input containing Telegram `custom_emoji` entities:
+When admin input in any supported rich-text editor contains Telegram `custom_emoji` entities:
 
-- read the real entity/custom emoji ID from Telegram update data;
-- preserve the visible fallback emoji/text;
-- store a custom-emoji segment in the rich document;
-- never guess an ID from Unicode appearance;
-- render through the central compiler.
+- read the actual custom emoji/document ID from Telegram update entities;
+- preserve a fallback visible character;
+- store it as a rich token;
+- never guess the ID from Unicode appearance;
+- compile it centrally at send/edit time.
 
-If the input contains only an ordinary Unicode emoji, store ordinary text.
+Ordinary emoji remains ordinary text.
 
 ### UTF-16 offsets
 
-Telegram message entity offsets are UTF-16 based. The compiler must calculate offsets centrally after placeholder expansion. Tests must include surrogate-pair emoji, Persian text and mixed content.
+Telegram entity offsets are UTF-16 based. One compiler calculates them after final placeholder/field expansion.
+
+Tests include Persian text, surrogate-pair emoji, custom emoji before/after expanded values, links and mixed formatting.
 
 ## Asset caption emoji
 
-Asset metadata includes an optional caption emoji rich token. Admin edits it from the asset page by sending/selecting an emoji.
+Asset metadata includes an optional caption emoji token.
 
-This is distinct from a global emoji manager: the emoji belongs to that asset's metadata.
+Admin edits it from the asset page, not a global emoji page.
 
-Resolution:
+Resolution order:
 
-- asset-specific emoji if configured;
-- family/default emoji if configured;
-- no emoji otherwise.
+1. asset-specific configured emoji;
+2. family/default emoji if configured;
+3. no emoji.
 
-## Button model
+## Button customization model
 
-Stable button spec fields may include:
+Every designated customizable button has a stable source-defined spec:
 
-- key;
-- localized text/rich-input source;
-- callback action ID or URL action;
-- Telegram style;
-- optional `icon_custom_emoji_id`;
-- enabled;
-- row/order metadata where the owning menu permits customization.
+- stable key;
+- default plain label;
+- source-defined action semantic (callback action or URL type);
+- allowed customization flags;
+- default Telegram style;
+- optional default custom emoji icon;
+- owning menu/placement metadata.
 
-Button text itself does not support normal message entities. If the admin supplies a custom emoji in a button-label edit flow, RateDeck should capture a supported custom emoji as the button icon and store remaining plain label text according to the editor contract.
+Admin override may include, **only if permitted by that spec**:
 
-Do not pretend multiple rich message entities can render inside button text.
+- label text;
+- style;
+- custom emoji icon;
+- enabled state;
+- row/order inside a menu intentionally declared configurable.
+
+Admin must not be able to replace built-in action semantics with arbitrary callback code/text.
+
+## Button custom emoji auto-capture
+
+Button text itself does not support normal message entities.
+
+In a button-label edit flow, if admin sends a Telegram custom emoji with text:
+
+- automatically capture a supported custom emoji as `icon_custom_emoji_id` according to the editor contract;
+- preserve the remaining plain label text;
+- preview the actual button representation.
+
+No separate icon-ID typing is required for normal use.
 
 ## Telegram button styles
 
-Admin may choose only:
+Expose only:
 
 - default;
 - primary;
 - success;
 - danger.
 
-Do not expose fake arbitrary HEX colors or unsupported “warning” styles as if Telegram would render them.
+Do not expose fake HEX colors or unsupported styles.
+
+## Menu customization
+
+Not every menu is arbitrarily rearrangeable.
+
+For menus explicitly marked configurable, admin may use inline controls to:
+
+- enable/disable safe optional buttons;
+- move button earlier/later;
+- move row up/down where layout contract permits;
+- preview resulting keyboard;
+- reset layout.
+
+Safety/navigation/destructive-confirmation buttons may keep fixed placement/semantics.
+
+The system always validates practical keyboard size/row layout before activation.
 
 ## Callback codec
 
-Central callback codec requirements:
+One central versioned codec:
 
-- versioned namespace;
-- short action ID;
-- compact integer/opaque record ID when needed;
-- UTF-8 byte count <= 64;
-- decode validation;
-- unknown namespace/action fails safely;
-- no secrets/user prose/JSON/templates in callback payload.
+- compact namespace/action/record ID;
+- <=64 UTF-8 bytes;
+- no API keys/templates/JSON/long asset labels/arbitrary user prose;
+- unknown version/action fails safely;
+- diagnostics can verify every source-defined button action resolves to a registered callback path.
 
-Example conceptual form:
+## Current-value display and safe previews
 
-`v1:a:asset:123`
+When an admin edits something, the **full current value belongs in the admin message body** where possible.
 
-Actual encoding may be more compact.
+Buttons display only a safe short preview.
 
-## Safe button labels/previews
+Central preview formatter:
 
-Admin menus often need to show a current value. Never put the entire previous template/value into a button.
-
-A central preview formatter should:
-
-- normalize newlines/whitespace;
-- preserve useful beginning and optionally ending context;
-- truncate on grapheme boundaries;
-- never split a custom emoji/fallback pair;
-- enforce a conservative UI character budget below platform failure thresholds;
-- add an ellipsis when shortened.
+- normalizes whitespace/newlines;
+- preserves useful start and optional end context;
+- truncates on grapheme boundaries;
+- does not split custom-emoji/fallback content;
+- uses a conservative UI budget;
+- adds ellipsis when shortened.
 
 Examples:
 
 - `✏️ ویرایش • 📊 بازارهای فعال…`
-- `متن فعلی: شروع متن…آخر متن`
-
-The full old value belongs in the admin message body, not the button.
+- `متن: شروع متن…آخر متن`
 
 ## Inline-first admin rule
 
-Use inline buttons whenever the value comes from a finite set:
+Use inline buttons for finite choices:
 
 - on/off;
 - provider/mode;
 - family;
-- theme/layout/chart style;
-- button style;
-- page;
+- style;
+- page/filter;
+- menu ordering actions;
 - position movement;
 - step size;
 - visibility;
 - reset/confirm/cancel;
-- recent/favorite asset;
-- predefined font/size choices where practical.
+- favorite/recent selection;
+- theme/layout/chart style in Phase 2.
 
-Use typed/free-form input only for genuinely arbitrary values:
+Use free-form input only for arbitrary values:
 
 - template body;
 - API key;
-- custom alias/search query;
+- custom alias/search term;
+- manual Stars package line;
 - custom text layer;
 - logo/image upload;
-- manual Stars price line;
-- numeric setting that cannot be represented safely by bounded choices.
+- numeric setting with no sensible bounded chooser.
 
 ## Pagination
 
-Large collections (hundreds of assets/templates) require:
+Large collections require fixed page size + Previous/Next + page indicator + filters/search. Never generate hundreds of inline buttons at once.
 
-- fixed page size;
-- Previous/Next;
-- current page indicator;
-- Favorites;
-- Recent;
-- category/family filters;
-- search fallback.
+## Edit-in-place
 
-Do not generate keyboards with hundreds of buttons.
+Prefer editing the current admin control message. One shared adapter handles Telegram cases where the existing media/content type cannot be edited and a replacement message is needed.
 
-## Edit-in-place UX
+## Callback latency
 
-Prefer `edit_message_text`, `edit_message_caption` or reply-markup edits for admin navigation when legal. If Telegram rejects the edit because media/content type requires replacement, use one central adapter that safely falls back to sending a new control message and optionally cleaning the previous one.
+Acknowledge callback queries immediately/early. Expensive preview/card work happens after callback acknowledgement.
 
-Do not duplicate this error handling in every router.
+## Dynamic data safety
 
-## Callback response latency
+Template structure is trusted after validation. Runtime placeholder values are escaped/typed and are not interpreted as markup unless the placeholder is explicitly declared a validated rich fragment.
 
-Callback queries are acknowledged immediately or as early as possible, while heavier work happens after acknowledgement. Card preview generation may send a temporary status/update if necessary; it must not leave Telegram's callback spinner hanging during expensive rendering.
+Links supplied by admin are validated.
 
-## Admin language
+## Diagnostics
 
-All Telegram admin UI defaults to Persian. Numeric output policy remains ASCII digits.
-
-## User template safety
-
-Dynamic user values are never interpreted as markup merely because the template supports formatting. The rich-text compiler distinguishes trusted template structure from escaped dynamic placeholder data, except where a placeholder type explicitly returns a prevalidated rich fragment.
-
-Links/URLs supplied by admin are validated before rendering.
+All template/placeholder/field/button/custom-emoji diagnostics are defined in `docs/DIAGNOSTICS.md` and must be available from Telegram admin.
 
 ## Required tests
 
-- unknown/malformed placeholder rejection;
+- Placeholder Registry scopes/descriptions/samples;
+- unknown/malformed/wrong-scope placeholder rejection;
+- literal-brace behavior;
 - required placeholder enforcement;
+- field dependency/cycle/depth/size checks;
 - optional empty field behavior;
 - sample preview generation;
-- custom emoji capture -> storage -> render round trip;
-- UTF-16 offsets after Persian text + placeholder expansion + emoji;
+- custom emoji capture -> persistence -> render round trip;
+- UTF-16 offsets after mixed Persian/placeholder/custom emoji content;
 - ordinary emoji remains ordinary;
-- button custom emoji icon extraction;
+- button custom emoji extraction;
 - supported style mapping only;
-- callback data 64-byte boundary;
-- malicious/long callback rejection;
+- callback 64-byte boundary/action registration;
 - grapheme-safe label shortening;
+- safe configurable-menu ordering;
 - large pagination sets;
-- edit-in-place fallback adapter;
-- dynamic placeholder escaping.
+- edit-in-place fallback;
+- dynamic placeholder escaping;
+- final rendered Telegram length enforcement.
