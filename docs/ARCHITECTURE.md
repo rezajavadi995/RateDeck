@@ -5,287 +5,253 @@
 RateDeck is intentionally lightweight:
 
 - Python async runtime;
-- aiogram 3.x Telegram adapter;
-- one bot process by default;
-- SQLite persistence behind repository interfaces;
-- local background refresh loop;
-- Pillow-based image rendering;
-- systemd service on Debian/Ubuntu;
-- no Redis/PostgreSQL requirement for initial product scope.
+- aiogram 3.x;
+- one bot process;
+- SQLite;
+- one local background refresh loop;
+- Pillow-based rendering in Phase 2;
+- systemd on Debian/Ubuntu in Phase 2;
+- no Redis/PostgreSQL/message broker requirement.
 
-The architecture must allow future replacement of SQLite or single-process locking without rewriting domain logic.
+The code should remain replaceable at real boundaries, but future hypothetical scaling must not distort the initial implementation.
 
-## Dependency rule
-
-The allowed direction is:
+## Dependency direction
 
 ```text
-Telegram / CLI / Scheduler adapters
+Telegram / CLI / scheduler adapters
               ↓
-        Application use-cases
+        application services
               ↓
-          Domain services
+     market/content/card domain
               ↓
-        Ports / interfaces
-              ↓
- Infrastructure adapters
-  (SQLite / HTTP / filesystem)
+   SQLite / HTTP / filesystem adapters
 ```
 
-Reverse imports are forbidden. In particular:
+Rules:
 
-- market domain code does not import aiogram;
-- card domain code does not import bot routers;
-- provider adapters do not import handlers;
-- repositories do not build Telegram keyboards;
-- CLI does not implement duplicate business logic.
+- market logic does not import aiogram;
+- provider adapters do not import routers;
+- repositories do not build keyboards;
+- CLI invokes application services instead of duplicating them;
+- no hidden bootstrap step mutates imported runtime symbols.
 
-## Suggested package tree
+## Preferred compact package shape
+
+This is the **starting shape**, not a mandate to create every file immediately:
 
 ```text
 ratedeck/
-├── __init__.py
 ├── app/
 │   ├── bootstrap.py
-│   ├── container.py
-│   ├── lifecycle.py
-│   └── scheduler.py
+│   └── lifecycle.py
 ├── bot/
 │   ├── factory.py
-│   ├── callbacks/
-│   │   ├── codec.py
-│   │   └── models.py
-│   ├── filters/
-│   ├── middlewares/
-│   ├── routers/
-│   │   ├── admin/
-│   │   │   ├── root.py
-│   │   │   ├── providers.py
-│   │   │   ├── assets.py
-│   │   │   ├── cards.py
-│   │   │   ├── content.py
-│   │   │   ├── buttons.py
-│   │   │   ├── stars.py
-│   │   │   ├── logs.py
-│   │   │   └── system.py
-│   │   ├── commands.py
-│   │   ├── market.py
-│   │   ├── support.py
-│   │   └── fallback.py
-│   └── ui/
-│       ├── keyboards.py
-│       ├── labels.py
-│       ├── pagination.py
-│       └── safe_preview.py
+│   ├── callbacks.py
+│   ├── ui.py
+│   └── routers/
+│       ├── admin/
+│       ├── commands.py
+│       ├── market.py
+│       ├── support.py
+│       └── fallback.py
 ├── market/
 │   ├── models.py
-│   ├── registry/
-│   │   ├── assets.py
-│   │   ├── aliases.py
-│   │   ├── families.py
-│   │   └── coingecko_mapping.py
+│   ├── registry.py
 │   ├── providers/
 │   │   ├── base.py
-│   │   ├── registry.py
 │   │   ├── nobitex.py
 │   │   ├── coingecko.py
 │   │   └── exchangerate.py
-│   ├── cache/
-│   │   ├── snapshots.py
-│   │   ├── freshness.py
-│   │   └── singleflight.py
-│   ├── budget/
-│   │   ├── models.py
-│   │   └── manager.py
-│   ├── parser/
-│   │   ├── normalize.py
-│   │   ├── lexer.py
-│   │   ├── aliases.py
-│   │   └── intent.py
-│   ├── conversion/
-│   │   ├── graph.py
-│   │   ├── routing.py
-│   │   └── service.py
-│   ├── history/
-│   │   ├── repository.py
-│   │   └── retention.py
-│   └── health/
-│       ├── models.py
-│       └── service.py
+│   ├── provider_runtime.py
+│   ├── parser.py
+│   ├── conversion.py
+│   ├── history.py
+│   └── service.py
 ├── content/
 │   ├── models.py
-│   ├── templates.py
 │   ├── placeholders.py
-│   ├── fields.py
-│   └── rich_text/
-│       ├── document.py
-│       ├── capture.py
-│       ├── compiler.py
-│       └── utf16.py
-├── cards/
-│   ├── models.py
-│   ├── design_system.py
-│   ├── families.py
-│   ├── layouts.py
-│   ├── themes.py
-│   ├── charts.py
-│   ├── renderer.py
-│   ├── elements.py
-│   └── assets.py
+│   ├── rich_text.py
+│   └── service.py
+├── diagnostics/
+│   └── service.py
 ├── storage/
 │   ├── database.py
 │   ├── migrations.py
-│   ├── repositories/
-│   └── schema/
+│   └── repositories.py
 ├── observability/
 │   ├── logging.py
-│   ├── audit.py
-│   ├── redaction.py
-│   └── correlation.py
+│   └── audit.py
 ├── security/
-│   ├── secrets.py
-│   └── admin.py
-├── cli/
-│   ├── main.py
-│   ├── menu.py
-│   └── commands/
-└── utils/
-    ├── numbers.py
-    ├── time.py
-    └── text.py
+│   └── secrets.py
+├── cards/            # mainly Phase 2; split when real renderer responsibilities exist
+└── cli/              # mainly Phase 2
 ```
 
-This is a boundary guide, not a mandate to create empty files. Codex should create only modules with real responsibility.
+If a module gains clearly separate responsibilities, split it then. Do not pre-create nested `cache/`, `budget/`, `health/`, `registry/`, `repositories/` packages just because a previous design sketch listed them.
 
 ## Composition root
 
-`app/container.py` or equivalent is the single explicit composition root. It constructs:
+Use one explicit bootstrap/composition location to construct:
 
-- configuration;
-- repositories;
-- shared async HTTP client(s);
-- provider registry;
-- provider budget manager;
-- asset/alias registries;
-- market refresh/orchestration service;
-- conversion service;
-- template/rich-text service;
-- card renderer;
-- audit/logging services;
-- Telegram routers/middlewares;
-- background refresh lifecycle.
+- config;
+- SQLite connection/repositories;
+- shared async HTTP client;
+- provider adapters + provider runtime policies;
+- asset registry/alias index;
+- market service + conversion service;
+- content/placeholder/rich-text service;
+- diagnostics service;
+- audit/logging;
+- Telegram bot/routers;
+- background refresh loop;
+- Phase 2 renderer/CLI when implemented.
 
-No hidden process-wide installation step may rewrite imported modules.
+Plain constructor arguments/objects are sufficient. No DI framework.
 
 ## Provider boundary
 
-Providers implement a typed interface such as conceptually:
+Providers need a small typed contract around real I/O, conceptually:
 
 ```text
-Provider
-├── id
-├── capabilities
-├── fetch_snapshot(...)
-├── health_probe(...)
-└── optional discovery/mapping methods
+provider_id
+capabilities
+fetch_snapshot(...)
+optional discovery/mapping operation
 ```
 
-A provider returns domain DTOs. Raw HTTP JSON is validated at the adapter boundary and is not passed into handlers.
+A separate `health_probe()` is only needed when an official cheap health operation materially differs from normal snapshot validation. Otherwise a bounded normal provider call can serve as the live diagnostic.
 
-## Repositories
+Raw provider JSON is validated/normalized at the adapter boundary and does not reach handlers.
 
-SQLite access is encapsulated by repositories. Core repositories likely include:
+## Provider runtime policy
 
-- SettingsRepository
-- AssetRepository
-- AliasRepository
-- ProviderStateRepository
-- MarketSnapshotRepository
-- HistoryRepository
-- TemplateRepository
-- ButtonRepository
-- CardConfigRepository
-- StarsPricingRepository
-- AuditRepository
+Keep provider runtime state simple and provider-specific:
 
-Repository interfaces make tests independent from Telegram and make future storage replacement possible.
+- enabled/mode;
+- refresh/minimum interval;
+- last attempt/success/failure;
+- last error category/latency;
+- request counters used by RateDeck;
+- cooldown/Retry-After/backoff;
+- last-known-good metadata;
+- one in-process singleflight lock.
+
+Do not build distributed locks or a generic quota platform.
+
+## Storage boundary
+
+SQLite is app-owned. A small repository layer groups SQL by domain, but no generic ORM/repository framework is required.
+
+It is acceptable for one `repositories.py` to contain several small cohesive repositories initially. Split it only when it becomes hard to review/test.
+
+Schema evolution is versioned from release one. A small deterministic migration runner is acceptable.
 
 ## Router/handler ordering
 
-Registration is explicit in one bot factory. No router imports itself for side effects.
+Registration is explicit in one bot factory. No side-effect router registration.
 
-Required order:
+Required priority:
 
 ```text
-Admin critical/recovery
-→ Admin FSM/state handlers
-→ User state handlers (if any)
-→ Explicit commands
-→ Typed callback namespaces
-→ Market parser handler
-→ Generic content/help
-→ Fallback
+Admin critical callbacks
+→ active admin/user FSM handlers
+→ explicit commands
+→ typed callback namespaces
+→ market parser
+→ generic content handlers
+→ fallback
 ```
 
-Why: compact market parsing is intentionally broad enough to understand `btc`, `100 usdt`, etc.; it must never consume `/panel`, an admin free-text state, or a callback-related flow.
+Collision tests must use the real dispatcher path so `/panel`, admin input states and commands cannot be consumed by the broad market parser.
 
-Add a test that inspects dispatcher/router registration or exercises collision cases through the real dispatcher.
+## Middleware
 
-## Middleware order
+Keep middleware small. Likely needs:
 
-Keep middleware minimal. Likely responsibilities:
+- correlation/update context;
+- admin context/authorization helper;
+- central error boundary;
+- optional callback dedupe/ack helper only if the implementation proves it useful.
 
-1. correlation/update context;
-2. admin authorization context;
-3. callback acknowledgement/dedupe safety where applicable;
-4. state/context injection;
-5. error boundary.
-
-Do not reproduce a complex stack of compatibility middlewares from older projects unless RateDeck genuinely requires them.
+Do not reproduce older projects' compatibility middleware stacks.
 
 ## Callback architecture
 
-Use a typed/versioned callback codec. Requirements:
+One typed/versioned callback codec:
 
-- <= 64 UTF-8 bytes before creating the button;
-- namespace/action/compact ID payload;
-- never embed templates, API keys, long asset names, JSON or user text;
-- reject malformed/unknown versions;
-- support pagination tokens/IDs compactly;
-- central tests for byte length.
+- <=64 UTF-8 bytes;
+- namespace/action/compact record ID;
+- no templates/API keys/JSON/long names/user prose;
+- malformed/unknown actions fail safely;
+- diagnostics can validate registered actions against button specs.
 
 ## Admin interaction state
 
-Use explicit FSM/state objects for free-form admin input. State must include enough context to know exactly what is being edited without inferring from previous message text.
+Use FSM only while awaiting arbitrary input. Finite choices stay inline.
 
-Admin navigation should prefer editing the existing control message, with safe fallback when Telegram cannot edit it.
+The state stores the exact object/key being edited; never infer edit context from previous displayed prose.
 
-## Background work
+Prefer editing the existing control message, with one shared fallback helper when Telegram requires replacement.
 
-A single scheduler/lifecycle component refreshes provider snapshots. It must:
+## Background refresh
 
-- obey provider budgets;
-- coalesce refreshes;
-- add small jitter so providers are not hit on an exact synchronized cadence;
-- persist success/failure/cooldown timestamps;
-- record local history after successful validated snapshots;
-- continue partial provider availability without marking unrelated stale providers fresh.
+One lightweight application lifecycle loop can schedule providers independently.
 
-## Data model versioning
+It must:
 
-Even with SQLite, schema evolution is versioned from the first release. Do not rely on ad-hoc `CREATE TABLE IF NOT EXISTS` mutations scattered through runtime code.
+- obey provider policy/cooldowns;
+- coalesce concurrent refreshes;
+- add modest jitter;
+- persist independent timestamps/state;
+- commit partial provider success independently;
+- update bounded history only for the configured hot set;
+- never make stale provider data fresh because another provider succeeded.
 
-A tiny internal migration runner is acceptable if the project remains lightweight; Alembic is optional, not mandatory. Whatever is chosen must be deterministic, testable and backup-safe.
+A full scheduling framework is unnecessary unless implementation evidence shows the simple loop is insufficient.
 
-## File-size/code-quality guidance
+## Asset discovery vs enrichment
 
-There is no arbitrary hard line limit, but large files are a design smell. Split a module when it contains multiple domains or when tests/imports indicate unrelated responsibilities.
+Nobitex whole-market discovery can register the full usable local universe efficiently.
 
-Avoid:
+CoinGecko mapping/enrichment is not required for every discovered asset immediately. Use batched lazy/demand-aware mapping to avoid unnecessary API traffic.
 
-- 1000-line router files;
-- all providers in one module;
-- parser + HTTP + DB + renderer in one service;
-- helper dumping grounds such as `utils.py` with unrelated functions.
+## Content architecture
 
-Clean code is a means, not the product. Prefer obvious, typed, testable code over abstraction for its own sake.
+Centralize the genuinely complex parts:
+
+- Placeholder Registry;
+- template contracts + validator;
+- rich-document capture/model;
+- placeholder expansion;
+- Telegram entity compiler/UTF-16 offsets;
+- ButtonSpec/callback codec;
+- safe preview/Telegram length validation.
+
+Do not create separate versions of these rules in each router.
+
+## Diagnostics architecture
+
+`DiagnosticsService` composes existing validators/services and returns typed bounded results. It does not reimplement provider/parser/template/button logic.
+
+Local diagnostics never use the network. Live provider diagnostics reuse provider adapters/runtime policy and therefore respect cooldowns/limits.
+
+See `docs/DIAGNOSTICS.md`.
+
+## Phase 2 cards
+
+Start with data-driven composition and reusable Pillow primitives. Avoid a deep class inheritance tree.
+
+Split `cards/` only along real responsibilities such as renderer, layouts/themes, charts/history integration, typography/assets and admin editor support.
+
+## Code-quality guidance
+
+There is no arbitrary file-length limit.
+
+Split when a module owns unrelated domains or becomes risky to change. Do not split simply to make the tree look “clean”.
+
+Avoid both extremes:
+
+- one 1500-line `bot.py` containing everything;
+- forty 20-line files that only forward calls.
+
+Prefer direct, typed, testable code with obvious control flow.
