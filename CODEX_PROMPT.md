@@ -7,7 +7,7 @@ Use this file as the execution prompt for Codex. Do not paste an ad-hoc architec
 Before changing runtime code:
 
 1. Read `AGENTS.md` completely.
-2. Read every source-of-truth document referenced by `AGENTS.md`, especially `docs/DECISIONS.md`, `docs/LEAN_IMPLEMENTATION.md`, `docs/DIAGNOSTICS.md` and `docs/PHASES.md`.
+2. Read every source-of-truth document referenced by `AGENTS.md`, especially `docs/DECISIONS.md`, `docs/LEAN_IMPLEMENTATION.md`, `docs/RESOURCE_AND_ISOLATION.md`, `docs/DIAGNOSTICS.md` and `docs/PHASES.md`.
 3. Inspect repository tree, current branch and exact head.
 4. State which major phase is being implemented.
 5. Break that phase into the checkpoints already defined in `docs/PHASES.md` and list the exact modules/files expected for the **first checkpoint only**.
@@ -17,7 +17,7 @@ Before changing runtime code:
 
 - No monkey patches, runtime symbol replacement or bootstrap patch installers.
 - Modular, but lean: no giant `bot.py`, and no explosion of tiny forwarding files/interfaces.
-- No DI framework, generic repository framework, event bus, CQRS, plugin framework, microservices, Redis, PostgreSQL or distributed locks in the defined initial scope.
+- No DI framework, generic repository framework, event bus, CQRS, plugin framework, microservices, Redis, PostgreSQL, NATS or distributed locks in the defined initial scope.
 - Prefer plain explicit composition, typed models, registries and table-driven policy.
 - Handler/router ordering is explicit and tested.
 - Telegram handlers are adapters/orchestrators only; they do not own provider HTTP, SQL, parser algorithms, card rendering algorithms or financial calculations.
@@ -38,6 +38,12 @@ Before changing runtime code:
 - Rate policy stays simple unless a real provider requires more: minimum interval + counters + Retry-After/429 cooldown/backoff + singleflight.
 - No API call per user request.
 - Diagnostics reuse real validators/services; local diagnostics perform zero network calls, live diagnostics obey provider limits.
+- Target deployment is shared 2 vCPU / 4 GB RAM / 40 GB disk with StarzYFire potentially running.
+- Default runtime is one RateDeck bot process using long polling, SQLite and bounded background work; no inbound API listener is required.
+- Never modify `/opt/star`, `starzyfire-*`, StarzYFire DB/Redis/NATS/config/secrets/backups/users/groups/ports.
+- Default Phase 2 card-render concurrency on that target is 1 unless measured evidence justifies increasing it.
+- Cache/history/log/backups/uploads/render queues must be bounded.
+- Do not claim shared-host safety without the measurements required by `docs/RESOURCE_AND_ISOLATION.md`.
 - Do not run Ruff.
 - Do not merge, deploy, restart production services or run production migrations.
 
@@ -102,7 +108,7 @@ Work in order:
 - Checkpoint 2A: design system/renderer;
 - Checkpoint 2B: truthful charts/elements;
 - Checkpoint 2C: Persian card designer/caption delivery/card diagnostics;
-- Checkpoint 2D: terminal/installer/systemd/backups/update/final hardening.
+- Checkpoint 2D: terminal/installer/systemd/backups/update/shared-host hardening.
 
 Required result:
 
@@ -111,15 +117,19 @@ Required result:
 - sparse asset overrides rather than per-asset design burden;
 - truthful bounded local-history charts and missing-history fallback;
 - data-driven editable card elements;
+- bounded render queue/cache with default shared-host concurrency 1;
 - preview-first Persian card designer;
 - rich customizable card captions using Phase 1 placeholder/rich-text engine;
 - complete card renderer diagnostics;
-- English `ratedeck` terminal control center;
-- safe idempotent `install.sh` + systemd + README one-liner;
+- English `ratedeck` terminal control center with Quick Setup / per-setting Config;
+- local terminal App Status showing measured RateDeck resource/data state without provider API calls;
+- safe idempotent `install.sh` + dedicated RateDeck paths/user/systemd + README one-liner;
 - backup/restore/update/repair flows with data preservation;
+- explicit isolation from StarzYFire/shared services;
+- actual resource/coexistence measurements before production-ready claim;
 - final full regression/readiness evidence.
 
-Do not invent history, add browser/headless rendering, or expand into unrelated infrastructure.
+Do not invent history, add browser/headless rendering, expand into unrelated infrastructure, or add guessed aggressive systemd CPU/memory limits before measurement.
 
 ## Implementation style
 
