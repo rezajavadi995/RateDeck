@@ -68,8 +68,14 @@ Preferred Phase 2 installation layout separates code, configuration and mutable 
   history/
 /var/log/ratedeck/            # only if file logging is enabled
 /var/backups/ratedeck/
-/usr/local/bin/ratedeck
+/usr/local/bin/price           # verified symlink to RateDeck venv CLI
 /etc/systemd/system/ratedeck.service
+```
+
+The intended global launcher relation is:
+
+```text
+/usr/local/bin/price -> /opt/ratedeck/.venv/bin/price
 ```
 
 A dedicated `ratedeck` service account should own only the paths it needs. It must not be added to StarzYFire-specific groups merely for convenience.
@@ -196,6 +202,8 @@ Terminal/App Status should show local, low-cost resource information without ext
 - background refresh heartbeat;
 - recent OOM/restart indication when detectable.
 
+Opening the global `price` menu must itself remain short-lived/lightweight and must not launch another RateDeck bot/background refresh process.
+
 Do not inspect or alter StarzYFire internals as part of normal RateDeck health checks. Coexistence verification can report host-level memory/load/disk only.
 
 ## Installation safety on a shared StarzYFire host
@@ -203,13 +211,15 @@ Do not inspect or alter StarzYFire internals as part of normal RateDeck health c
 Installer must:
 
 - create only RateDeck-owned user/paths/unit/launcher;
+- create `/usr/local/bin/price` only after verifying it does not overwrite an unrelated existing command/path;
+- verify `/usr/local/bin/price` points to the RateDeck venv console script after install/repair;
 - avoid changing Redis/PostgreSQL/NATS configuration;
 - avoid changing firewall rules/ports by default;
 - avoid distro-wide Python package mutation outside the RateDeck venv;
 - avoid restarting unrelated services after apt operations;
 - fail if target RateDeck paths unexpectedly point/symlink into another app path;
 - validate that `/opt/ratedeck`, `/var/lib/ratedeck`, `/etc/ratedeck` and backup paths are not symlinked to StarzYFire locations;
-- uninstall only exact RateDeck-owned resources.
+- uninstall only exact RateDeck-owned resources, including removing `/usr/local/bin/price` only if ownership/target verification succeeds.
 
 ## Coexistence acceptance gate
 
@@ -220,10 +230,11 @@ Before production deployment on the shared 4 GB / 2 vCPU host:
 3. run bounded provider refresh;
 4. render representative cards serially and in the configured bounded queue;
 5. exercise parser/admin/diagnostics;
-6. observe StarzYFire health/latency during RateDeck bursts without modifying StarzYFire;
-7. verify no RateDeck process opens unexpected inbound ports;
-8. verify RateDeck has no open files/connections to StarzYFire-owned DB/config/data paths;
-9. verify disk/cache/history/backups remain bounded;
-10. fail release if RateDeck causes meaningful StarzYFire instability or sustained host resource pressure.
+6. exercise `price` menu/status/update preflight without spawning an extra bot process;
+7. observe StarzYFire health/latency during RateDeck bursts without modifying StarzYFire;
+8. verify no RateDeck process opens unexpected inbound ports;
+9. verify RateDeck has no open files/connections to StarzYFire-owned DB/config/data paths;
+10. verify disk/cache/history/backups remain bounded;
+11. fail release if RateDeck causes meaningful StarzYFire instability or sustained host resource pressure.
 
 The exact measured results must be reported; do not call coexistence safe based only on architecture assumptions.
