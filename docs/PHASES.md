@@ -230,22 +230,44 @@ Read `docs/RESOURCE_AND_ISOLATION.md` before Phase 2 implementation.
 
 ### Terminal
 
-English colored `ratedeck` control center:
+English colored RateDeck control center with **global shell command `price`**:
 
+- bare `price` opens the interactive menu from any working directory;
+- `/usr/local/bin/price -> /opt/ratedeck/.venv/bin/price` verified symlink;
+- `price status|start|stop|restart` convenience subcommands;
 - Quick Setup / per-setting Config for bot token, admin IDs, log level;
-- service status/start/stop/restart;
+- exact Service submenu with `Status / Start / Stop / Restart / Enable at boot / Disable at boot`;
+- `Service -> Start` is the normal menu action that runs the bot;
 - local App Status with RateDeck RSS/CPU/DB/disk/cache/history/backups/render queue/refresh heartbeat;
 - logs/errors;
 - DB status;
 - backup/list/verify/restore;
 - Telegram smoke;
 - render test card using the normal render resource gate;
-- safe update/repair;
+- smart update/repair;
 - uninstall scopes.
 
 No provider/API product configuration in terminal.
 
-Opening the terminal must not start a second bot, scheduler or provider refresher.
+Opening `price` must not start a second bot, scheduler or provider refresher.
+
+### Smart update
+
+- validate RateDeck repo/path/remote/branch;
+- fetch/compare exact local/remote commits;
+- show up-to-date/update-available/diverged state;
+- refuse unsafe dirty/diverged normal update;
+- no-op cleanly when already current;
+- show changed commits/files on request;
+- verify disk/backup capacity;
+- create/verify pre-update backup;
+- fast-forward-only normal code update;
+- reinstall dependencies only if manifests changed or repair requests it;
+- run only pending RateDeck migrations;
+- repair/verify `price` launcher/systemd only when relevant;
+- smoke-check then restart/verify `ratedeck.service` according to explicit update policy;
+- report every executed/skipped step;
+- no blind `git pull`, `reset --hard` or `clean -fd` normal path.
 
 ### Installer/systemd
 
@@ -258,10 +280,9 @@ Opening the terminal must not start a second bot, scheduler or provider refreshe
 - SQLite DB/data/cache/history in RateDeck-owned data path;
 - DB init/migration;
 - `ratedeck.service` only;
-- `/usr/local/bin/ratedeck` launcher;
+- Python console entry point `price` inside RateDeck venv;
+- verified `/usr/local/bin/price` symlink, with safe refusal on unrelated existing command collision;
 - README one-line installer;
-- fast-forward-safe updater;
-- no blind hard reset/clean;
 - backups before risky update/restore/migration;
 - no Redis/PostgreSQL/NATS changes;
 - no firewall/inbound port changes by default;
@@ -276,6 +297,7 @@ On representative 2 vCPU / 4 GB RAM / 40 GB hardware before production-ready cla
 - measure bounded provider refresh behavior;
 - measure representative card-render peak with configured concurrency;
 - repeat refresh/render cycles to detect sustained memory growth;
+- exercise `price` menu/status/update preflight without spawning another bot;
 - verify no unexpected inbound listener;
 - verify cache/history/log/backups remain bounded;
 - observe StarzYFire health/latency during RateDeck bursts without modifying it;
@@ -299,6 +321,8 @@ Must satisfy `docs/DEFINITION_OF_DONE.md`, including:
 - all card customizations work through real admin UI;
 - full test suite pass;
 - installer smoke + rerun/data-preservation/isolation evidence;
+- `price` launcher works from arbitrary paths and service shortcuts/menu actions are consistent;
+- smart update handles no-op/dirty/update/dependency/migration/backup/restart verification correctly;
 - terminal Quick Setup and local resource status work as specified;
 - provider budget/stale-state behavior remains correct;
 - diagnostics Phase 2 card checks pass;
