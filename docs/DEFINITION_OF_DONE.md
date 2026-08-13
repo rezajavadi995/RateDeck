@@ -140,7 +140,7 @@ A phase/release is done only when applicable gates below are evidenced on the ex
 - [ ] Dedicated RateDeck paths/service account/systemd unit are used.
 - [ ] Installer/update/repair/uninstall do not touch `/opt/star`, `starzyfire-*`, StarzYFire DB/Redis/NATS/config/secrets/backups/users/groups/ports.
 - [ ] RateDeck persistent data is isolated from the source worktree where practical.
-- [ ] Opening the `ratedeck` terminal does not start a second bot/refresher/provider scheduler.
+- [ ] Opening bare `price` does not start a second bot/refresher/provider scheduler.
 - [ ] HTTP concurrency/background refresh/history/cache/log/backups/uploads are bounded.
 - [ ] Actual warmed steady-state RSS and representative render peak are measured and reported on representative hardware.
 - [ ] Repeated refresh/render cycles show no unexplained sustained memory growth.
@@ -153,15 +153,24 @@ A phase/release is done only when applicable gates below are evidenced on the ex
 - [ ] One-line README installer matches real `install.sh`.
 - [ ] Fresh supported Debian/Ubuntu install smoke passes.
 - [ ] Re-running installer preserves config, DB, assets and master key.
-- [ ] `ratedeck` launcher works outside project directory.
+- [ ] Python console entry point `price` exists inside the RateDeck venv.
+- [ ] `/usr/local/bin/price` is a verified symlink to `/opt/ratedeck/.venv/bin/price`.
+- [ ] Installer refuses to silently overwrite an unrelated existing `/usr/local/bin/price`.
+- [ ] Bare `price` opens the terminal menu from arbitrary working directories.
+- [ ] `price status`, `price start`, `price stop`, `price restart` use the same underlying service-control logic as the menu.
+- [ ] `Service -> Start` starts only `ratedeck.service`; starting when already active does not spawn a second instance.
 - [ ] Terminal Quick Setup can set/validate bot token, admin IDs and log level without exposing secrets.
 - [ ] Changing one basic setting does not require rerunning the whole setup wizard.
 - [ ] systemd service uses expected dedicated user/venv/working directory and starts cleanly.
-- [ ] Dirty tracked RateDeck repo causes normal update to stop safely.
-- [ ] Normal updater does not blind `reset --hard`/`clean -fd` operator state.
-- [ ] Pre-update backup is created/verified.
+- [ ] Smart update shows local/remote status and cleanly no-ops when already current.
+- [ ] Dirty/diverged RateDeck repo causes normal update to stop safely.
+- [ ] Normal updater does not blind `git pull`, `reset --hard` or `clean -fd` operator state.
+- [ ] Update determines whether dependencies/migrations/launcher/systemd changes actually require action.
+- [ ] Pre-update backup is created/verified before mutation.
+- [ ] Fast-forward update + pending migrations + smoke checks + RateDeck-only restart/health verification are tested.
 - [ ] Backup/restore has pre-restore safety backup.
 - [ ] Uninstall preserve-data vs full-purge scopes are distinct and RateDeck-only.
+- [ ] Uninstall removes `/usr/local/bin/price` only after verifying it is the RateDeck-owned symlink.
 - [ ] Terminal does not duplicate provider/API product settings.
 - [ ] CLI/status/log output does not expose secrets.
 - [ ] Terminal App Status reports real local RateDeck RSS/CPU/DB/disk/cache/history/backup/queue/refresh-loop information where available without external provider calls.
