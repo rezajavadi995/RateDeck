@@ -44,7 +44,7 @@ Do not create Phase 2 card/upload/backup tables here.
 - last-known-good without fake freshness;
 - bounded hot-set history only.
 
-No generalized distributed quota framework, distributed lock, Redis or worker process.
+No generalized distributed quota framework, distributed lock, Redis, PostgreSQL, NATS or worker process.
 
 ## Checkpoint 1C — Parser + conversion + Stars
 
@@ -176,7 +176,9 @@ Review Phase 1 before starting Phase 2.
 
 ## Objective
 
-Turn the correct Phase 1 core into the finished polished RateDeck product: exceptional customizable cards plus safe server operations and one-command installation.
+Turn the correct Phase 1 core into the finished polished RateDeck product: exceptional customizable cards plus safe server operations and one-command installation, while fitting the documented 4 GB RAM / 2 vCPU shared-host target without destabilizing StarzYFire.
+
+Read `docs/RESOURCE_AND_ISOLATION.md` before Phase 2 implementation.
 
 ## Checkpoint 2A — Card design system + renderer
 
@@ -190,19 +192,22 @@ Turn the correct Phase 1 core into the finished polished RateDeck product: excep
 - 1080x1080 primary output, preferably 2x internal render/downsample where feasible;
 - gradients/glass/surfaces/shadows/typography;
 - robust Persian text + ASCII numeric values;
-- render cache;
+- bounded render cache;
+- default render concurrency 1 on target shared host unless measurement proves more safe;
 - no deep inheritance tree.
 
 ## Checkpoint 2B — Truthful charts + card elements
 
-- bounded local-history integration;
+- bounded hot-set local-history integration;
+- explicit age/row/storage retention;
 - truthful recent windows where enough samples exist;
 - smooth line/area styles;
 - high/low/current markers;
 - range/history-collecting fallback when insufficient;
 - no fabricated trend points;
 - data-driven elements: price, asset/logo, brand logo, title/subtitle, changes, high/low, source, timestamp, custom text, etc.;
-- position/size/alignment/font/weight/opacity/visibility/layer controls.
+- position/size/alignment/font/weight/opacity/visibility/layer controls;
+- bounded render queue/backpressure and cleanup of temporary/intermediate images.
 
 ## Checkpoint 2C — Persian Card Designer + caption delivery
 
@@ -212,47 +217,69 @@ Turn the correct Phase 1 core into the finished polished RateDeck product: excep
 - asset override editor;
 - inline move controls + step sizes;
 - size/font/alignment/opacity/visibility/layer controls;
-- logo upload/replace/remove;
+- logo upload/replace/remove with size/type/count bounds;
 - custom text layers;
 - preview-first workflow;
 - reset/inheritance behavior;
 - parser result -> cached quote -> card -> customizable rich caption -> Telegram delivery;
 - source/freshness/stale presentation;
 - graceful text fallback on renderer failure according to policy;
-- Phase 2 card diagnostics (font/logo/config/render/history).
+- Phase 2 card diagnostics (font/logo/config/render/history/resource queue).
 
-## Checkpoint 2D — Terminal + installer + production hardening
+## Checkpoint 2D — Terminal + installer + shared-host production hardening
 
 ### Terminal
 
 English colored `ratedeck` control center:
 
+- Quick Setup / per-setting Config for bot token, admin IDs, log level;
 - service status/start/stop/restart;
+- local App Status with RateDeck RSS/CPU/DB/disk/cache/history/backups/render queue/refresh heartbeat;
 - logs/errors;
 - DB status;
 - backup/list/verify/restore;
-- basic config;
 - Telegram smoke;
-- render test card;
+- render test card using the normal render resource gate;
 - safe update/repair;
 - uninstall scopes.
 
 No provider/API product configuration in terminal.
 
+Opening the terminal must not start a second bot, scheduler or provider refresher.
+
 ### Installer/systemd
 
 - safe idempotent `install.sh`;
 - supported Debian/Ubuntu detection;
-- app service user/directories as appropriate;
-- venv/dependencies;
-- `.env`/master-key/DB/assets preservation;
+- exact RateDeck-owned paths separated from StarzYFire;
+- dedicated `ratedeck` service user;
+- venv/dependencies isolated from system Python/StarzYFire;
+- protected config/master key outside git worktree;
+- SQLite DB/data/cache/history in RateDeck-owned data path;
 - DB init/migration;
-- systemd unit;
+- `ratedeck.service` only;
 - `/usr/local/bin/ratedeck` launcher;
 - README one-line installer;
 - fast-forward-safe updater;
 - no blind hard reset/clean;
-- backups before risky update/restore/migration.
+- backups before risky update/restore/migration;
+- no Redis/PostgreSQL/NATS changes;
+- no firewall/inbound port changes by default;
+- no operations against `/opt/star`, `starzyfire-*` or StarzYFire-owned resources.
+
+### Resource/coexistence validation
+
+On representative 2 vCPU / 4 GB RAM / 40 GB hardware before production-ready claim:
+
+- record baseline with StarzYFire running;
+- measure RateDeck idle/warmed RSS/CPU;
+- measure bounded provider refresh behavior;
+- measure representative card-render peak with configured concurrency;
+- repeat refresh/render cycles to detect sustained memory growth;
+- verify no unexpected inbound listener;
+- verify cache/history/log/backups remain bounded;
+- observe StarzYFire health/latency during RateDeck bursts without modifying it;
+- treat meaningful StarzYFire instability or sustained host pressure as a release blocker.
 
 ### Final hardening
 
@@ -271,9 +298,11 @@ Must satisfy `docs/DEFINITION_OF_DONE.md`, including:
 - representative visual review/golden evidence;
 - all card customizations work through real admin UI;
 - full test suite pass;
-- installer smoke + rerun/data-preservation evidence;
+- installer smoke + rerun/data-preservation/isolation evidence;
+- terminal Quick Setup and local resource status work as specified;
 - provider budget/stale-state behavior remains correct;
 - diagnostics Phase 2 card checks pass;
+- resource/coexistence measurements are reported rather than assumed;
 - no fake history;
 - no monkey patches;
 - docs/README installation commands match reality.
