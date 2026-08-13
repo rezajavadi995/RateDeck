@@ -18,7 +18,9 @@ RateDeck has two administration surfaces with different jobs.
 ### Terminal Control Center
 
 - English-only;
+- first-run operational setup;
 - server/service operations;
+- local resource/status view;
 - logs/database/backup/update/repair/install lifecycle;
 - no provider/API product administration.
 
@@ -228,6 +230,12 @@ Full application backup/restore UX belongs to Phase 2 operations. Telegram admin
 
 # Terminal Control Center — Phase 2
 
+## Goal
+
+The terminal should feel as convenient as the useful operational parts of StarzYFire while remaining much smaller because RateDeck does not need Redis/PostgreSQL/NATS/API-server administration.
+
+It is a polished operations console, not a second product admin panel.
+
 ## Global launcher
 
 Installer creates:
@@ -236,86 +244,176 @@ Installer creates:
 /usr/local/bin/ratedeck
 ```
 
+Running `ratedeck` from any directory opens the control center.
+
 ## Language/style
 
 English-only. ANSI/Rich color when TTY is available, plain fallback when redirected.
 
-Conceptual menu:
+Recommended root menu:
 
 ```text
-╭──────────────────────────────────────────────╮
-│           RateDeck Control Center            │
-│            ● RUNNING  PID 1234               │
-╰──────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────╮
+│             RateDeck Control Center              │
+│       ● RUNNING   PID 1234   RSS 186 MB          │
+╰──────────────────────────────────────────────────╯
 
- [1] Service
- [2] App Status
- [3] Logs
- [4] Database
- [5] Backup / Restore
- [6] Basic Config
- [7] Telegram Test
- [8] Render Test Card
- [9] Update / Repair
- [0] Exit
+ [1]  Setup / Config
+ [2]  Service
+ [3]  App Status
+ [4]  Logs
+ [5]  Database
+ [6]  Backup / Restore
+ [7]  Telegram Test
+ [8]  Render Test Card
+ [9]  Update / Repair
+ [0]  Exit
 ```
 
-Provider/API product settings do not appear here.
+Header status should be fast/local and must not call external market APIs.
+
+Provider/API product settings never appear here.
+
+## Setup / Config
+
+This is intentionally easy and direct.
+
+### Quick Setup
+
+For a fresh install:
+
+```text
+RateDeck Quick Setup
+
+ Bot token : NOT CONFIGURED
+ Admin IDs : NOT CONFIGURED
+ Log level : INFO
+
+ [1] Set bot token
+ [2] Set admin IDs
+ [3] Change log level
+ [4] Validate configuration
+ [5] Test Telegram connection
+ [6] Start RateDeck
+ [0] Back
+```
+
+Rules:
+
+- token is never printed after entry;
+- existing token shows only `CONFIGURED` or a safe fingerprint if useful;
+- admin IDs are validated as numeric IDs;
+- log level uses a bounded choice, not arbitrary typing;
+- validation does not modify unrelated settings;
+- Telegram Test is explicit and bounded;
+- Start/Restart affects `ratedeck.service` only;
+- changing one value does not force a full wizard rerun.
+
+This provides the configuration convenience wanted from StarzYFire without importing StarzYFire's unrelated infrastructure menus.
 
 ## Service
 
-- status/start/stop/restart;
+- status;
+- start;
+- stop;
+- restart;
 - enable/disable systemd autostart;
 - optional foreground debug run.
 
+Every action targets exactly `ratedeck.service` and reports the actual systemd outcome.
+
+## App Status
+
+Local-only status page, no provider/API call:
+
+```text
+Service        RUNNING
+PID            1234
+RSS            186 MB
+CPU            1.2%
+Uptime         03:12:41
+DB             OK / 28 MB / schema 7
+Disk free      24.8 GB
+History        42 MB
+Render cache   118 MB
+Backups        390 MB
+Render queue   0 / 1 active
+Refresh loop   healthy
+Last restart   ...
+```
+
+Values are examples only; implementation reports real measured data.
+
+Also surface recent OOM/restart evidence where safely detectable.
+
+Do not inspect/modify StarzYFire internals from this page. Host-level memory/load/disk may be shown as coexistence context.
+
 ## Logs
 
-- follow service journal;
+- follow RateDeck service journal;
 - recent logs/errors;
-- sanitized diagnostic bundle.
+- bounded sanitized diagnostic bundle.
 
-## Database / backup
+Never tail unrelated StarzYFire/shared-service logs from this menu.
 
-- DB path/size/schema status;
-- backup now/list/verify;
-- restore with strong confirmation;
-- safe optional maintenance.
+## Database
 
-## Basic config
+- RateDeck DB path/size/schema status;
+- integrity/read-write smoke;
+- safe optional maintenance;
+- no PostgreSQL menu because RateDeck uses its own SQLite database.
 
-Only operational bootstrap values such as Telegram token, admin IDs and log level. Provider keys/routing remain inside Telegram admin.
+## Backup / Restore
+
+- backup now;
+- list backups;
+- verify backup;
+- retention/size summary;
+- restore with strong confirmation and pre-restore safety backup.
+
+Only RateDeck-owned data is included.
 
 ## Telegram test
 
-Use `getMe` and optional bounded test message to configured admin. Never print token.
+Use `getMe` and optionally send one bounded test message to a configured admin. Never print the token.
 
 ## Render test card
 
-Use sample/current cached data without uncontrolled API refresh.
+Use local sample data or current cache without uncontrolled provider refresh.
+
+This action must use the same render concurrency/resource gate as normal card rendering so terminal tests cannot overload the shared server.
 
 ## Update / repair
 
-- inspect repo state;
+- inspect RateDeck repo state;
 - refuse unsafe overwrite of tracked modifications;
-- back up DB/config/assets/key first;
+- back up RateDeck DB/config/assets/key first;
 - fetch and fast-forward-only normal update;
-- install changed dependencies as required;
-- controlled migrations;
+- install changed dependencies only inside RateDeck venv;
+- controlled RateDeck migrations;
 - smoke tests;
-- restart only according to explicit update/operator action;
-- preserve recoverable old data on failure.
+- restart RateDeck only according to explicit update/operator action;
+- preserve recoverable old RateDeck data on failure.
 
-Never use blind normal-path `git reset --hard` + `git clean -fd`.
+Never use blind normal-path `git reset --hard` + `git clean -fd` and never operate on `/opt/star` or `starzyfire-*` units.
 
 ## Uninstall
 
 Separate:
 
-- application/service removal while preserving data/backups;
-- full purge with stronger confirmation.
+- RateDeck application/service removal while preserving RateDeck data/backups;
+- RateDeck full purge with stronger confirmation.
 
-Do not remove unrelated system services/packages.
+Do not remove unrelated system services/packages or StarzYFire resources.
 
 ## Shared logic
 
-CLI calls the same app services for DB/backup/health/render where applicable. It does not reimplement product logic in shell.
+CLI calls the same app services for DB/backup/health/render/config where applicable. It does not reimplement product logic in shell.
+
+## Resource behavior
+
+Terminal itself should be lightweight and short-lived. Opening `ratedeck` must not launch a second long-running bot, background scheduler or provider refresher.
+
+Status/config/database views use local state. Live external API diagnostics stay in Telegram Admin and remain quota-aware.
+
+Read `docs/RESOURCE_AND_ISOLATION.md` for the target VPS budget and coexistence acceptance gate.
