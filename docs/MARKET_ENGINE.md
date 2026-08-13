@@ -1,284 +1,294 @@
 # Market Engine Contract
 
-## Goals
+## Goal
 
-The market engine owns the normalized, validated, cached view of rates and market metadata. It is provider-aware but provider-agnostic at its public boundary.
+The market engine owns the normalized, validated, cached view of rates and conversion metadata. Telegram handlers and card renderers consume this service; they do not fetch providers directly.
 
-Telegram handlers and card renderers consume domain snapshots from this engine; they do not fetch external APIs.
+The implementation must stay lightweight: a few typed models/services are preferred over a framework of manager classes.
 
-## Core domain objects
+## Core models
 
 ### Asset
 
 Conceptual fields:
 
-- canonical key (stable internal identifier);
-- symbol;
-- display name;
-- category/family;
-- aliases;
+- stable internal key/id;
+- symbol/display name;
+- family/category;
 - enabled state;
-- source identities (Nobitex symbol, CoinGecko ID, fiat code, manual ID);
-- available quote currencies/markets;
+- aliases;
+- provider identities/mappings;
+- available markets/quote currencies;
 - caption emoji metadata;
-- card-family override;
-- mapping confidence/status;
-- created/discovered/updated timestamps.
+- mapping status/confidence;
+- discovery/update timestamps.
 
 ### MarketEdge
 
-A directed conversion edge with:
+Directed conversion edge:
 
 - source asset;
 - target asset;
-- rate as Decimal;
-- provider/source;
-- source market/pair;
-- fetched/snapshot timestamp;
-- validation/freshness status;
-- bid/ask/latest/mark metadata where available;
-- direct vs derived classification;
-- optional confidence/quality score.
+- exact Decimal rate;
+- provider/source market;
+- fetched/source timestamp;
+- status/freshness;
+- optional bid/ask/latest/mark quality metadata;
+- direct/derived classification;
+- provenance.
 
-The graph may synthesize an inverse edge from a valid positive direct edge while preserving provenance.
+A valid positive direct edge may produce an inverse edge while retaining provenance.
 
-### ProviderSnapshot
+### ProviderResult
 
-Provider-specific snapshot with:
+Normalized provider refresh result:
 
-- provider ID;
-- fetched_at;
-- source_updated_at when supplied by provider;
-- status;
+- provider ID/capability;
+- fetched_at/source_updated_at;
 - validated edges;
-- metadata;
+- discovered assets/markets where relevant;
 - latency;
-- error code/category if failed;
-- last-known-good linkage/age.
+- rejected-item count;
+- sanitized failure category/details when failed.
 
-No global timestamp may refresh all providers at once.
+Provider runtime timestamps live independently per provider/capability.
 
-### Quote/ConversionResult
+### ConversionResult
 
-Must include:
+Includes:
 
-- input amount/source/target;
-- final Decimal value;
-- selected path;
-- every path edge/provider;
-- oldest edge timestamp/freshness;
-- whether any edge is stale/derived/manual;
-- human-readable source summary;
-- warnings if appropriate.
+- source amount/source/target;
+- exact final Decimal value;
+- selected edge path;
+- providers/markets used;
+- oldest/effective freshness;
+- stale/manual/derived flags;
+- source summary/warnings.
 
 ## Dynamic Nobitex discovery
 
-The primary Nobitex refresh should use the most efficient validated whole-market snapshot available from the public market stats surface.
+Use the efficient whole-market public snapshot when validated/current behavior supports it.
 
-Observed live behavior on 2026-08-13: an unfiltered stats request returned 495 market keys in a single successful response. RateDeck may use this efficient behavior while treating it as provider behavior that can change.
+Observed live on 2026-08-13: unfiltered stats returned 495 market keys in one successful response.
 
-### Parsing market keys
+Do not maintain a finite manual Nobitex symbol list.
 
-A key such as:
+### Market key parsing
+
+Example:
 
 `xaut-rls`
 
-is parsed into source `xaut` and quote `rls` at the provider adapter boundary.
+Provider adapter resolves base `xaut`, quote `rls`.
 
-Nobitex `rls` is Rial. RateDeck user-facing `IRT/Toman` conversion must explicitly divide Rial-denominated values by 10 when creating the Toman edge. Keep both identities distinct internally when useful; never label raw Rial as Toman.
+Nobitex `rls` is Rial. User-facing Toman is explicitly derived by dividing Rial values by 10. Never label raw Rial as Toman.
 
 ### Validation
 
-For every market entry:
+Per market:
 
-- key shape must be parseable;
-- numeric values must parse as finite Decimal;
-- latest/mark/bid/ask values used as rates must be > 0;
-- absurd/invalid structures are rejected, not cached as valid;
-- `isClosed` is preserved as market metadata;
-- zero-volume markets may still be represented but should carry quality metadata;
-- asset identity must remain stable across refreshes.
+- parseable key;
+- finite Decimal numeric fields;
+- rate used for conversion >0;
+- malformed market isolated rather than poisoning other valid entries;
+- `isClosed` preserved;
+- zero-volume may remain informational/low-quality, not silently equivalent to healthy liquid market;
+- stable asset identity preserved across refreshes.
 
-One malformed market must not poison the entire valid snapshot unless the response envelope itself is unusable.
+### Asset sync
 
-### Asset registry sync
+Refresh may insert new assets/markets and update existing provider metadata.
 
-A refresh can discover new assets. Sync behavior:
+It must not:
 
-- insert new discovered identity;
-- update markets/metadata for existing assets;
-- never delete an asset merely because it disappears for one refresh;
-- mark missing/retired state only after an explicit policy/threshold;
-- preserve admin aliases/style overrides;
-- preserve history.
+- delete an asset from one missing refresh;
+- delete admin aliases/customization;
+- discard history because a market temporarily disappears.
 
-## CoinGecko mapping
+## CoinGecko enrichment
 
-CoinGecko is global crypto/USD enrichment, not the source of truth for asset identity.
+CoinGecko provides global crypto/USD enrichment; it is not the master identity source for all assets.
 
-Mapping states:
+Mapping states may include:
 
-- `verified` — explicit built-in/admin-confirmed CoinGecko ID;
-- `auto_unique` — automatically resolved only when mapping evidence is uniquely safe;
-- `ambiguous` — multiple candidates; no automatic USD binding;
-- `unmapped` — no candidate;
-- `disabled` — admin declined mapping.
+- `verified`;
+- safe `auto_unique`;
+- `ambiguous`;
+- `unmapped`;
+- `disabled`.
 
-Never silently choose a CoinGecko asset solely because its symbol matches when multiple candidates exist.
+Never silently choose among symbol collisions.
 
-### Mapping sync cadence
+### Demand-aware mapping
 
-Coin list/mapping metadata changes much less frequently than price data. Cache mapping discovery for a long period (for example daily) and do not call the full coin list per user request or per short price refresh.
+Supporting all Nobitex markets does **not** require resolving all of them against CoinGecko.
 
-### Price batching
+Mapping/price enrichment should prioritize:
 
-Request multiple verified CoinGecko IDs per provider call within provider-supported request constraints. Do not make one call per asset.
+- known/core assets;
+- favorites;
+- recently requested assets;
+- explicitly verified/admin-selected mappings;
+- assets currently needing global USD/card enrichment.
 
-## Fiat registry
+Batch within provider constraints. Cache mapping metadata much longer than price data.
 
-The fiat provider supplies supported currency codes and a USD-based conversion snapshot. Cache supported-code discovery separately from rate refresh.
+Unused/ambiguous assets may remain fully functional for Nobitex local-market conversion without CoinGecko enrichment.
 
-Fiat edges must not override local-market Toman edges.
+## Fiat provider
 
-## Manual Stars pricing
+ExchangeRate-like fiat provider supplies supported global fiat codes/rates.
 
-Stars packages are separate from the normal continuous rate graph unless an explicit package conversion use-case is valid.
+Its official IRR rate is not silently treated as Iranian free-market Toman authority.
 
-Stored package example:
+## Stars
 
-- quantity: Decimal/integer `50`;
-- price_toman: Decimal `125000`;
-- source: `manual_stars_package`;
-- updated_at;
-- enabled.
+Telegram Stars uses exact admin-defined packages, separate from continuous market rates by default.
 
-Default behavior:
+Example:
 
-- exact package matches are valid;
-- no interpolation;
-- no extrapolation;
-- no fabricated USD/TON conversion unless explicitly requested and supported through a truthful conversion path.
+`50 Stars = 125000 Toman`
 
-## Cache model
+Rules:
 
-### Provider-specific state
+- exact package match;
+- no interpolation/extrapolation by default;
+- audit changes;
+- no fabricated USD/TON conversion unless a truthful explicit policy/path exists.
 
-For each provider persist:
+## Provider runtime state
 
-- last_attempt_at;
-- last_success_at;
-- last_failure_at;
-- last_error_category;
-- cooldown_until;
-- consecutive_failures/penalty level;
-- latest validated snapshot reference;
-- last-known-good snapshot reference;
+Keep each provider/capability independent:
+
+- enabled/mode;
+- configured refresh/minimum interval;
+- last attempt/success/failure;
+- last error category/latency;
+- cooldown until;
+- consecutive failure/backoff state;
+- RateDeck request counters/window metadata;
+- last-known-good metadata.
+
+No global success timestamp.
+
+## Background-first refresh
+
+Normal user requests read current validated state.
+
+One lightweight lifecycle loop schedules providers independently and:
+
+- obeys policy/cooldown;
+- uses modest jitter;
+- coalesces concurrent refreshes;
+- commits partial provider success independently;
+- does not rewrite stale LKG timestamps as new success.
+
+## Singleflight
+
+Default deployment is one process. One `asyncio.Lock`/equivalent per provider/capability is sufficient.
+
+Do not add distributed locking infrastructure.
+
+## Rate-limit policy
+
+Provider call permission is based on a simple provider policy/runtime state:
+
+- minimum request interval;
 - configured refresh interval;
-- hard/min request interval;
-- request budget counters where meaningful.
+- known quota/request counters where meaningful;
+- `Retry-After`;
+- 429 cooldown/backoff;
+- next allowed call.
 
-### Freshness
+Manual admin live test/refresh obeys hard cooldown. It does not contain a “force bypass quota” path.
 
-Freshness is evaluated per edge/provider. A conversion path's effective freshness is constrained by its oldest/least-fresh required edge.
+Do not build a generalized token-bucket/distributed quota platform unless real provider behavior proves the simple model insufficient.
 
-A successful CoinGecko refresh cannot refresh Nobitex age. A successful fiat refresh cannot refresh CoinGecko age.
+## Freshness / LKG
 
-### Last-known-good
+Freshness is per edge/provider.
 
-When policy permits display use, a stale LKG snapshot may be returned with explicit stale metadata. It is never written back with a new success timestamp.
+A conversion path inherits the weakest/oldest required edge freshness.
 
-Admin health surfaces must distinguish:
+A stale last-known-good value may be used only according to display policy and always retains its original success timestamp/stale label.
 
-- fresh success;
+Admin distinguishes:
+
+- fresh;
 - stale LKG;
 - cooldown;
 - disabled;
 - no data;
-- malformed response;
-- auth/quota error.
+- malformed/auth/quota failure.
 
-## Refresh orchestration
+## Conversion graph
 
-### Background-first
-
-Normal user requests read cached snapshots. Background refresh owns provider traffic.
-
-### Singleflight
-
-For each provider/capability, at most one refresh leader runs at a time in the default single-process runtime. Followers reuse the leader result or current valid cache.
-
-### Jitter
-
-Scheduled refreshes use small jitter rather than all providers firing at the same second.
-
-### Partial success
-
-If CoinGecko fails while Nobitex and fiat succeed:
-
-- record CoinGecko failure;
-- keep CoinGecko LKG with old timestamp if allowed;
-- commit valid Nobitex/fiat snapshots independently;
-- do not label the whole market engine “fresh” as one undifferentiated state.
-
-## Rate budget manager
-
-Provider calls must pass through a central budget gate.
-
-Conceptual state:
-
-- min interval;
-- rolling/minute allowance when known;
-- monthly/daily quota if known;
-- request count observed by RateDeck;
-- Retry-After support;
-- 429 penalty/cooldown;
-- manual refresh cooldown;
-- next allowed request time.
-
-Provider published maximums are **ceilings, not targets**. RateDeck should operate far below them through batching/caching.
-
-A manual admin “test/refresh” does not bypass a hard cooldown. It should report when the next safe attempt is allowed.
-
-## History
-
-After each validated market snapshot, persist selected normalized points needed for cards/history.
-
-Do not store every redundant field forever. Use retention/downsampling policy:
-
-- short-window raw samples for recent charts;
-- optional aggregated older points;
-- prune by age/asset activity.
-
-The exact retention policy is configurable and tested.
-
-## Derived routes
+The graph is rebuilt/updated from current validated edges.
 
 Examples:
 
-- TON -> USD via verified CoinGecko direct price;
-- TON -> IRT via a direct local market when available;
-- asset -> USDT -> IRT via Nobitex when no direct IRT pair exists;
-- fiat EUR -> USD via ExchangeRate;
-- BTC -> EUR via BTC/USD (CoinGecko) + USD/EUR (fiat), if that route is selected by policy.
+- direct Nobitex local pair;
+- Nobitex asset -> USDT -> IRT bridge;
+- verified CoinGecko crypto -> USD;
+- fiat -> USD;
+- BTC -> USD -> EUR when policy selects that truthful path.
 
-Derived rates must carry the full component path. Never render “Source: Nobitex” when the actual result used Nobitex + CoinGecko + ExchangeRate.
+Derived result includes every component provider/edge.
 
-## Route quality/scoring
+## Route policy
 
-Conversion route selection should be table-driven. Factors may include:
+Keep deterministic and table/policy driven.
 
-1. direct edge preferred;
-2. domain-authoritative source preferred for target market;
-3. fewer hops;
-4. fresher edges;
-5. non-stale over stale;
-6. verified mapping over ambiguous/derived mapping;
-7. avoid loops and unnecessary round-trips.
+Typical priorities:
 
-Policy examples:
+1. usable direct edge;
+2. authoritative provider for target domain;
+3. non-stale over stale;
+4. fewer hops;
+5. fresher path;
+6. verified mapping over unsafe/ambiguous mapping;
+7. no loops/unnecessary round trips.
 
-- IRT/Toman target: prefer direct Nobitex local edge.
-- USD crypto target: prefer verified CoinGecko direct USD edge.
-- global fiat: prefer ExchangeRate fiat edge.
+Examples:
 
-The routing service should be deterministic for the same graph/policy.
+- IRT target prefers direct valid Nobitex local edge;
+- crypto/USD prefers verified CoinGecko direct edge when available;
+- global fiat prefers fiat provider.
+
+## Bounded history
+
+History exists to support cards, not to become a market-data warehouse.
+
+Never write all discovered market pairs on every provider refresh by default.
+
+Maintain a bounded hot set such as:
+
+- core assets;
+- favorites;
+- recently requested assets;
+- assets with active card customization/usage.
+
+Use a bounded sample cadence plus:
+
+- age retention;
+- per-series cap where useful;
+- global row/storage cap;
+- pruning tests.
+
+For an asset without enough history, Phase 2 renders a truthful fallback using current/range metadata or “history collecting”. No synthetic line chart.
+
+## Diagnostics
+
+Market/provider diagnostics are defined in `docs/DIAGNOSTICS.md` and reuse these same provider/runtime/registry objects.
+
+Local diagnostics do not call providers. Live diagnostics obey provider policy/cooldown.
+
+## Anti-overengineering checks
+
+Before adding market infrastructure, ask:
+
+- Does a current provider require it?
+- Does single-process SQLite runtime actually need it?
+- Can the same behavior be expressed by provider policy + lock + state + service?
+
+If yes to the simple path, use it.
