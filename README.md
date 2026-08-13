@@ -140,13 +140,28 @@ Phase 2 provides:
 
 ## Terminal control center
 
-Phase 2 terminal UI is English-only and launched globally with:
+Phase 2 terminal UI is English-only. The global command is:
 
 ```bash
-ratedeck
+price
 ```
 
-It includes a simple **Setup / Config** flow for bot token, admin IDs and log level, plus service lifecycle, local App Status, logs, database/backup, Telegram/render tests, update/repair and uninstall.
+Installer creates `/usr/local/bin/price` as a verified symlink to the RateDeck console entry point inside `/opt/ratedeck/.venv/bin/price`, so `price` opens the terminal menu from any working directory.
+
+Useful shell shortcuts use the same service-control code:
+
+```bash
+price status
+price start
+price stop
+price restart
+```
+
+Inside the menu the normal action that runs the bot is **`Service -> Start`**. Bare `price` opens the menu and does not create a second bot process.
+
+The terminal includes a simple **Setup / Config** flow for bot token, admin IDs and log level, plus service lifecycle, local App Status, logs, database/backup, Telegram/render tests, smart update/repair and uninstall.
+
+The update flow is state-aware: it checks local/remote commit state, dirty tree, pending dependencies/migrations, backup space and service state; performs fast-forward-only update; installs/migrates only when needed; smoke-checks; then verifies `ratedeck.service`. It is not a blind `git pull` button.
 
 App Status is local-only and is intended to show RateDeck service state, RSS/CPU snapshot, DB size/schema, disk free space, history/cache/backups, render queue and refresh-loop health without consuming provider API quota.
 
@@ -154,7 +169,7 @@ Provider/API product management remains inside Telegram.
 
 ## Installation target
 
-Phase 2 must provide a safe idempotent `install.sh`, dedicated `ratedeck` service account, isolated RateDeck paths, systemd unit and one-line installer.
+Phase 2 must provide a safe idempotent `install.sh`, dedicated `ratedeck` service account, isolated RateDeck paths, systemd unit, global `price` symlink and one-line installer.
 
 Final command shape:
 
