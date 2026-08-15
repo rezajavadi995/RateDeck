@@ -2,7 +2,24 @@
 
 RateDeck is a lightweight, production-oriented Telegram market and conversion bot with deeply customizable Persian admin controls, dynamic market discovery, strict parsing, provider-aware rate limiting, complete template/button/placeholder support, professional diagnostics, and an exceptional card renderer in Phase 2.
 
-> **Status:** specification/foundation only. Runtime implementation is intentionally deferred to Codex Phase 1 and Phase 2.
+> **Status:** Phase 1 core runtime is implemented for owner review. Phase 2 cards and
+> production operations/installer remain intentionally deferred until that review.
+
+## Phase 1 development
+
+RateDeck requires Python 3.11 or newer. Install the development package and run the
+local suite (which uses provider fixtures and makes no live API calls by default):
+
+```bash
+python -m pip install -e '.[test]'
+pytest -q
+python -m compileall -q ratedeck tests
+python -c "import ratedeck, ratedeck.market, ratedeck.content, ratedeck.telegram"
+```
+
+Runtime configuration is read from `RATEDECK_BOT_TOKEN`, `RATEDECK_ADMIN_IDS`,
+`RATEDECK_DATABASE`, `RATEDECK_MASTER_KEY`, and `RATEDECK_LOG_LEVEL`. Secrets and
+local database/key files must not be committed.
 
 ## Product balance
 

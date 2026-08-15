@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ratedeck"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["aiogram>=3.15,<4", "aiohttp>=3.10,<4", "cryptography>=43,<46", "regex>=2024.7"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
